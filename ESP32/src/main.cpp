@@ -1,5 +1,5 @@
-#include <PotReader.h>
 #include <Timers.h>
+#include <BLEEngine.h>
 
 static u16_t delayUs = 0;
 static u16_t pwUs = 0;
@@ -9,14 +9,9 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("started");
-  // Serial.println(pdMS_TO_TICKS);
 
-  startTasks();
   setupTimers();
+  initBLE();
 }
 
-void loop() {
-  u8_t zcSkips = channelPulseSkips.voltage * zcSkipsMax / vMax;
-  Serial.println(zcSkips);
-  delay(500);
-}
+void loop() {}

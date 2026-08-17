@@ -1,0 +1,10 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.RSSTCInterrupterApp" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">#0071fd</item>
+        <item name="colorSecondary">#0071fd</item>
+    </style>
+
+    <style name="Theme.RSSTCInterrupterApp" parent="Base.Theme.RSSTCInterrupterApp"/>
+
+</resources>
