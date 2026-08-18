@@ -17,7 +17,7 @@ struct Capability {
 
 static Capability delayUS = {
     .name = "Delay after zero cross",
-    .max = 20000
+    .max = 10000
 };
 
 static Capability pwUS = {
