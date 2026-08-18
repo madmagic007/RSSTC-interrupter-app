@@ -4,17 +4,13 @@ import android.annotation.SuppressLint;
 import android.bluetooth.*;
 import android.bluetooth.le.*;
 import android.content.Context;
-import android.os.Build;
 import android.os.ParcelUuid;
 import android.util.Log;
+import androidx.annotation.NonNull;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Collections;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.UUID;
+import java.util.*;
 
 @SuppressLint("MissingPermission")
 public class BLEManager {
@@ -22,7 +18,7 @@ public class BLEManager {
     private static final UUID SERVICE_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
     public static final UUID CAPS_UUID    = UUID.fromString("11111111-1111-1111-1111-111111111111");
     public static final UUID REPORT_UUID  = UUID.fromString("22222222-2222-2222-2222-222222222222");
-    public static final UUID VALUES_UUID  = UUID.fromString("33333333-3333-3333-3333-333333332222");
+    public static final UUID VALUES_UUID  = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final UUID CCCD_UUID    = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
 
     private final Context context;
@@ -30,7 +26,6 @@ public class BLEManager {
     private BluetoothGattCharacteristic capsChar, reportChar, valuesChar;
 
     private boolean connected = false;
-    private long lastMessage = System.currentTimeMillis();
     private long timeoutDelay = 10000;
     private Timer sendtimer;
     private Timer cancelTimer;
@@ -87,12 +82,11 @@ public class BLEManager {
         stopSendTimer();
 
         sendtimer = new Timer();
-        sendtimer.schedule(new TimerTask() {
+        sendtimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
                 try {
-                    Log.d("BLE", "sending ping");
-                    writeJson(new JSONObject().put("msg", "ping"));
+                    writeString("ping");
                 } catch (Exception ignored) {}
             }
         }, 1000, 1000);
@@ -112,7 +106,41 @@ public class BLEManager {
 
 
     public void connect(BluetoothDevice device) {
+        if (gatt != null) gatt.close();
+
         gatt = device.connectGatt(context, false, gattCallback);
+    }
+
+    private final Queue<BluetoothGattCharacteristic> notificationQueue = new ArrayDeque<>();
+    private boolean descriptorWritePending = false;
+    private int processNotificationQueue() {
+        if (gatt == null || descriptorWritePending) return 1;
+
+        BluetoothGattCharacteristic characteristic = notificationQueue.peek();
+        if (characteristic == null) return 0;
+
+        BluetoothGattDescriptor descriptor = characteristic.getDescriptor(CCCD_UUID);
+
+        if (descriptor == null) {
+            Log.e("BLE", "CCCD missing: " + characteristic.getUuid());
+            notificationQueue.poll();
+            processNotificationQueue();
+            return 1;
+        }
+
+        if (!gatt.setCharacteristicNotification(characteristic, true)) {
+            Log.e("BLE", "setCharacteristicNotification failed: " + characteristic.getUuid());
+            notificationQueue.poll();
+            processNotificationQueue();
+            return 1;
+        }
+
+        descriptorWritePending = true;
+
+        int started = gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+        Log.d("BLE","writeDescriptor " +characteristic.getUuid() + " started=" + (started == 1));
+
+        return 1;
     }
 
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
@@ -122,23 +150,37 @@ public class BLEManager {
                 g.discoverServices();
 
                 connected = true;
-                lastMessage = System.currentTimeMillis();
-
-                resetSendTimer();
-                resetCancelTimer();
 
                 stopScanning();
-
-                onDeviceConnected();
+                onDeviceConnected(g.getDevice().getName());
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connected = false;
 
                 stopSendTimer();
                 stopCancelTimer();
-
                 startScanning();
-
                 onDeviceDisconnected();
+            }
+        }
+
+        @Override
+        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+            UUID uuid = descriptor.getCharacteristic().getUuid();
+            Log.d("BLE", "CCCD write: " + uuid + " status=" + status);
+
+            descriptorWritePending = false;
+
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.e("BLE", "Failed CCCD write: " + uuid + " status=" + status);
+            }
+
+            notificationQueue.poll();
+            if (processNotificationQueue() == 0) {
+                resetSendTimer();
+                resetCancelTimer();
+
+                Log.d("BLE", "all notifications enabled, requesting capabilities");
+                writeString("caps");
             }
         }
 
@@ -153,69 +195,50 @@ public class BLEManager {
         }
 
         @Override
-        public void onMtuChanged(BluetoothGatt g, int mtu, int status) {
+        public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
             Log.d("BLE", "MTU: " + mtu + " status: " + status);
-            enableIndications(g, capsChar);
-            enableIndications(g, reportChar);
+
+            notificationQueue.offer(capsChar);
+            notificationQueue.offer(reportChar);
+            processNotificationQueue();
         }
 
         @Override
-        public void onCharacteristicChanged(BluetoothGatt g, BluetoothGattCharacteristic characteristic) {
-            lastMessage = System.currentTimeMillis();
+        public void onCharacteristicChanged(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, @NonNull byte[] value) {
+            resetCancelTimer();
+            String str = new String(value);
 
-            byte[] data = characteristic.getValue();
-            String json = new String(data, StandardCharsets.UTF_8);
+            if (str.equals("pong")) return;
 
             try {
-                JSONObject obj = new JSONObject(json);
+                JSONObject obj = new JSONObject(str);
                 onDataReceived(characteristic.getUuid(), obj);
             } catch (JSONException e) {
-                Log.e("BLE", "Bad JSON: " + json, e);
+                Log.e("BLE", "Bad JSON: " + str, e);
             }
         }
     };
 
-    private void enableIndications(BluetoothGatt g, BluetoothGattCharacteristic characteristic) {
-        if (characteristic == null) return;
-
-        g.setCharacteristicNotification(characteristic, true);
-        BluetoothGattDescriptor descriptor = characteristic.getDescriptor(CCCD_UUID);
-        if (descriptor != null) {
-            descriptor.setValue(BluetoothGattDescriptor.ENABLE_INDICATION_VALUE);
-            g.writeDescriptor(descriptor);
-        }
-    }
-
     public void writeValue(String key, int value) {
-        if (valuesChar == null || gatt == null) return;
-
         try {
             JSONObject obj = new JSONObject()
                     .put("msg", "value")
                     .put("k", key)
                     .put("v", value);
 
-            writeJson(obj);
+            writeString(obj.toString());
         } catch (JSONException e) {
             Log.e("BLE", "Failed to build value JSON", e);
         }
     }
 
-    public void writeJson(JSONObject o) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            gatt.writeCharacteristic(valuesChar, o.toString().getBytes(),  BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
-        } else {
-            valuesChar.setValue(o.toString().getBytes());
-            valuesChar.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
-            boolean success = gatt.writeCharacteristic(valuesChar);
-            if (!success) {
-                Log.e("BLE", "Write failed (legacy API)");
-            }
-        }
+    public void writeString(String str) {
+        if (valuesChar == null || gatt == null || !connected) return;
+        gatt.writeCharacteristic(valuesChar, str.getBytes(),  BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
     }
 
     protected void onDataReceived(UUID uuid, JSONObject data) {}
     protected void onScanResult(ScanResult scanResult) {}
-    protected void onDeviceConnected() {}
+    protected void onDeviceConnected(String name) {}
     protected void onDeviceDisconnected() {}
 }
