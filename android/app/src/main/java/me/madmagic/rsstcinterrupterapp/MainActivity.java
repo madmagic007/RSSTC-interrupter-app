@@ -7,6 +7,7 @@ import android.bluetooth.le.ScanResult;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.ListView;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -19,6 +20,7 @@ import java.util.UUID;
 public class MainActivity extends AppCompatActivity {
 
     private BLEManager bleManager;
+    private MyAdapter adapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,6 +39,13 @@ public class MainActivity extends AppCompatActivity {
             protected void onDataReceived(UUID uuid, JSONObject data) {
                 Log.d("BLE", data.toString());
 
+                runOnUiThread(() -> {
+                    try {
+                        if (uuid.equals(BLEManager.CAPS_UUID)) {
+                            adapter.addData(data);
+                        }
+                    } catch (Exception ignored) {}
+                });
             }
 
             @Override
@@ -53,6 +62,8 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     TextView tv = findViewById(R.id.conDevice);
                     tv.setText("No interrupter connected");
+
+                    adapter.clear();
                 });
             }
 
@@ -66,6 +77,10 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         };
+
+        ListView listContainer = findViewById(R.id.valuesContainer);
+        adapter = new MyAdapter(this, bleManager::writeValue);
+        listContainer.setAdapter(adapter);
 
         findViewById(R.id.btnStartScan).setOnClickListener(l -> {
             bleManager.startScanning();

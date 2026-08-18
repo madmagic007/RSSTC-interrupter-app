@@ -222,10 +222,10 @@ public class BLEManager {
     public void writeValue(String key, int value) {
         try {
             JSONObject obj = new JSONObject()
-                    .put("msg", "value")
-                    .put("k", key)
-                    .put("v", value);
+                    .put(key, value);
 
+
+            Log.d("BLE", obj.toString());
             writeString(obj.toString());
         } catch (JSONException e) {
             Log.e("BLE", "Failed to build value JSON", e);
