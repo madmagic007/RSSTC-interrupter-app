@@ -1,6 +1,5 @@
 #include <Timers.h>
 #include <BLEEngine.h>
-#include <Capability.h>
 
 static u16_t delayUs = 0;
 static u16_t pwUs = 0;
@@ -16,6 +15,10 @@ void setup() {
 }
 
 void loop() {
-  sendHB();
+  String str = "hb";
+
+  reportChars->setValue((uint8_t*)str.c_str(), str.length());
+  reportChars->notify();
+
   delay(1000);
 }

@@ -43,6 +43,8 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         if (uuid.equals(BLEManager.CAPS_UUID)) {
                             adapter.addData(data);
+                        } else if (uuid.equals(BLEManager.REPORT_UUID)) {
+                            adapter.updateData(data.optString("name"), data.optInt("value"));
                         }
                     } catch (Exception ignored) {}
                 });

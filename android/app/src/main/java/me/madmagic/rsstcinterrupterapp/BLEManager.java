@@ -66,30 +66,10 @@ public class BLEManager {
         scanner.stopScan(scanCb);
     }
 
-    private void stopSendTimer() {
-        try {
-            sendtimer.cancel();
-        } catch (Exception ignored) {}
-    }
-
     private void stopCancelTimer() {
         try {
             cancelTimer.cancel();
         } catch (Exception ignored) {}
-    }
-
-    private void resetSendTimer() {
-        stopSendTimer();
-
-        sendtimer = new Timer();
-        sendtimer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                try {
-                    writeString("ping");
-                } catch (Exception ignored) {}
-            }
-        }, 1000, 1000);
     }
 
     private void resetCancelTimer() {
@@ -103,7 +83,6 @@ public class BLEManager {
             }
         }, timeoutDelay);
     }
-
 
     public void connect(BluetoothDevice device) {
         if (gatt != null) gatt.close();
@@ -156,7 +135,6 @@ public class BLEManager {
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connected = false;
 
-                stopSendTimer();
                 stopCancelTimer();
                 startScanning();
                 onDeviceDisconnected();
@@ -176,7 +154,6 @@ public class BLEManager {
 
             notificationQueue.poll();
             if (processNotificationQueue() == 0) {
-                resetSendTimer();
                 resetCancelTimer();
 
                 Log.d("BLE", "all notifications enabled, requesting capabilities");
@@ -206,9 +183,9 @@ public class BLEManager {
         @Override
         public void onCharacteristicChanged(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, @NonNull byte[] value) {
             resetCancelTimer();
-            String str = new String(value);
 
-            if (str.equals("pong")) return;
+            String str = new String(value);
+            if (str.equals("hb")) return;
 
             try {
                 JSONObject obj = new JSONObject(str);
