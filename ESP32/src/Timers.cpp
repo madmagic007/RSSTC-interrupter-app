@@ -21,11 +21,11 @@ static void IRAM_ATTR timerISR() {
             timerWrite(timer, 0);
             timerAlarm(timer, pwUS.value, false, 0);
 
-            GPIO.out_w1ts.val = (1 << 1);
+            GPIO.out_w1ts.val = (1 << 17);
             break;
         }
         case 2: {
-            GPIO.out_w1tc.val = (1 << 1);
+            GPIO.out_w1tc.val = (1 << 17);
             stage = 99;
             break;
         }
@@ -34,7 +34,7 @@ static void IRAM_ATTR timerISR() {
 
 static void IRAM_ATTR gpioISR() {
     zcCount = zcCount + 1;
-    if (zcCount < zcSkipCount.value) return;
+    if (zcCount < zcSkipCount.value || pwUS.value == 0) return;
 
     zcCount = 0;
     stage = 0;
@@ -43,8 +43,8 @@ static void IRAM_ATTR gpioISR() {
 }
 
 void setupTimers() {
-    pinMode(1, OUTPUT);
-    digitalWrite(1, LOW);
+    pinMode(17, OUTPUT);
+    digitalWrite(17, LOW);
 
     pinMode(16, INPUT_PULLDOWN);
     attachInterrupt(digitalPinToInterrupt(16), gpioISR, RISING);
