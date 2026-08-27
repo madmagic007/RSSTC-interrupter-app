@@ -4,6 +4,7 @@
 
 Capability delayUS = {
     .name = "Delay after zero cross",
+    .value = 350,
     .max  = 10000
 };
 
@@ -14,7 +15,7 @@ Capability pwUS = {
 
 Capability zcSkipCount = {
     .name  = "Zero cross skips",
-    .value = 50,
+    .value = 100,
     .max   = 100
 };
 
