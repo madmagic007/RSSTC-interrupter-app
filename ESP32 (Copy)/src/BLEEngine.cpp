@@ -95,8 +95,8 @@ class ValueCallbacks : public BLECharacteristicCallbacks {
     }
 };
 
-void initBLE() {
-    BLEDevice::init("ESP32-SSTC-interrupter");
+void initBLE(const String& name) {
+    BLEDevice::init(name);
     BLEDevice::setMTU(247);
 
     BLEServer* pServer = BLEDevice::createServer();

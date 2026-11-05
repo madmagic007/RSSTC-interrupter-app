@@ -4,13 +4,13 @@
 
 Capability delayUS = {
     .name = "Delay after zero cross",
-    .value = 350,
+    .value = 0,
     .max  = 10000
 };
 
 Capability pwUS = {
     .name = "Pulse width",
-    .max  = 20000
+    .max  = 10000
 };
 
 Capability zcSkipCount = {
@@ -34,36 +34,42 @@ bool setCapabilityValue(const String& name, uint32_t value) {
  
     uint32_t projectedDelay = (cap == &delayUS)     ? requested : delayUS.value;
     uint32_t projectedPW    = (cap == &pwUS)        ? requested : pwUS.value;
-    uint32_t safeSkip       = (cap == &zcSkipCount) ? requested : zcSkipCount.value;
+    uint32_t projectedSkip  = (cap == &zcSkipCount) ? requested : zcSkipCount.value;
  
-
+    // Too high pulse duration combined with too frequent BPS (low zero cross skips) caused alot of IGBT failures, some checks in place to prevent this
     bool conflict = false;
-    if (projectedDelay + projectedPW > 10000 && safeSkip < 2) {
-        safeSkip = 3;
+    if (projectedDelay + projectedPW > 10000 && projectedSkip <= 2) { // prevents "permanent on situation"
+        projectedSkip = 3;
+        conflict = true;
+    }
+
+    if (projectedPW > 300 && projectedSkip < 20) { // limit to 300us at 5Hz
+        projectedSkip = 20;
+        projectedPW = 300;
         conflict = true;
     }
  
-    if (safeSkip != zcSkipCount.value) {
-        zcSkipCount.value = safeSkip;
+    if (projectedSkip != zcSkipCount.value) {
+        zcSkipCount.value = projectedSkip;
+    }
+
+    if (projectedPW != pwUS.value) {
+        pwUS.value = projectedPW;
     }
  
-    if (cap != &zcSkipCount) {
-        cap->value = requested;
+    if (projectedDelay != delayUS.value) {
+        delayUS.value = projectedDelay;
     }
  
     if (conflict) {
+        reportValue(delayUS.name, delayUS.value);
+        delay(1);
+        reportValue(pwUS.name, pwUS.value);
+        delay(1);
         reportValue(zcSkipCount.name, zcSkipCount.value);
     }
-
-    Serial.printf("%d, %d\n", delayUS.value + pwUS.value, zcSkipCount.value);
  
     return true;
-}
-
-
-Capability* getCapability(const String& name) {
-    auto it = capabilityRegistry.find(name);
-    return (it != capabilityRegistry.end()) ? it->second : nullptr;
 }
 
 void applyIncomingJson(const String& json) {

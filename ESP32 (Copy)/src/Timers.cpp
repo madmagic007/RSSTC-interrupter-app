@@ -13,7 +13,7 @@ static void IRAM_ATTR timerISR() {
         case 0: {
             stage = 1;
             timerWrite(timer, 0);
-            timerAlarm(timer, delayUS.value, false, 0);
+            timerAlarm(timer, delayUS.value + 350, false, 0); // my hardware triggered 350us to early to the actual zero cross
             break;
         }
         case 1: {
@@ -34,7 +34,7 @@ static void IRAM_ATTR timerISR() {
 
 static void IRAM_ATTR gpioISR() {
     zcCount = zcCount + 1;
-    if (zcCount < zcSkipCount.value || pwUS.value == 0) return;
+    if (zcCount <= zcSkipCount.value || pwUS.value == 0) return;
 
     zcCount = 0;
     stage = 0;
@@ -42,12 +42,12 @@ static void IRAM_ATTR gpioISR() {
     timerAlarm(timer, 1, false, 0);
 }
 
-void setupTimers() {
-    pinMode(17, OUTPUT);
-    digitalWrite(17, LOW);
+void setupTimers(u8_t pin_zc, u8_t pin_output) {
+    pinMode(pin_output, OUTPUT);
+    digitalWrite(pin_output, LOW);
 
-    pinMode(16, INPUT_PULLDOWN);
-    attachInterrupt(digitalPinToInterrupt(16), gpioISR, RISING);
+    pinMode(pin_zc, INPUT_PULLDOWN);
+    attachInterrupt(digitalPinToInterrupt(pin_zc), gpioISR, RISING);
 
     timer = timerBegin(1000000); // 1MHz
     timerAttachInterrupt(timer, timerISR);

@@ -19,8 +19,7 @@ extern std::map<String, Capability*> capabilityRegistry;
 typedef void (*CapabilityChangeCallback)(const String& name, uint32_t value);
 void setCapabilityChangeCallback(CapabilityChangeCallback cb);
 
-bool        setCapabilityValue(const String& name, uint32_t value);
-Capability* getCapability(const String& name);
+bool setCapabilityValue(const String& name, uint32_t value);
 
 String getCapabilities(); 
-void   applyIncomingJson(const String& json);
+void applyIncomingJson(const String& json);
