@@ -14,6 +14,7 @@ TonePlayer::TonePlayer(u8_t outputPin) {
         mcpwm_timer_config_t config = {};
 
         config.group_id = 0;
+        config.flags.update_period_on_empty = true;
         config.clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT;
         config.resolution_hz = 1000000;
         config.count_mode = MCPWM_TIMER_COUNT_MODE_UP;
@@ -88,12 +89,16 @@ bool IRAM_ATTR TonePlayer::onMcpwmTimer(mcpwm_timer_handle_t timer, const mcpwm_
     u32_t channel = (u32_t)(uintptr_t)userData;
 
     if (!channelEnabled[channel]) return false;
+
+    int64_t now = esp_timer_get_time();
     
     portENTER_CRITICAL_ISR(&pulseMux);
-    pendingPulses = pendingPulses + 1;
+    //pendingPulses = pendingPulses + 1;
 
-    if (!gpioTimerRunning) {
+    if (!gpioTimerRunning && (now - lastPulseUS) >= pulseSkipWindow) {
         gpioTimerRunning = true;
+        lastPulseUS = now;
+
         timerWrite(gpioTimer, 0);
         timerAlarm(gpioTimer, 1, false, 0);
         timerStart(gpioTimer);
@@ -106,7 +111,6 @@ bool IRAM_ATTR TonePlayer::onMcpwmTimer(mcpwm_timer_handle_t timer, const mcpwm_
 
 void IRAM_ATTR TonePlayer::handleGpio() {
     portENTER_CRITICAL_ISR(&pulseMux);
-    gpioCallbackCount = gpioCallbackCount + 1;
 
     if (!gpioState) {
         GPIO.out_w1ts.val = outputPinMask;
@@ -115,7 +119,7 @@ void IRAM_ATTR TonePlayer::handleGpio() {
         timerWrite(gpioTimer, 0);
         timerAlarm(gpioTimer, onTimeUS, false, 0);
 
-        pendingPulses = pendingPulses - 1;
+        //pendingPulses = pendingPulses - 1;
     } else {
         GPIO.out_w1tc.val = outputPinMask;
         gpioState = false;

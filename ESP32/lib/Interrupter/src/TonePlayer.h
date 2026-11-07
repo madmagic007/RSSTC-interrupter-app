@@ -18,8 +18,6 @@ class TonePlayer {
         static void startPlayingSequence(ToneDataEntry* sequence, u32_t len);
         static void handleToneDataEntry(ToneDataEntry toneData);
 
-        static inline volatile uint32_t gpioCallbackCount = 0;
-
     private:
         static inline u32_t outputPinMask = -1;
 
@@ -51,6 +49,8 @@ class TonePlayer {
         static inline bool gpioState = false;
         static inline portMUX_TYPE pulseMux = portMUX_INITIALIZER_UNLOCKED;
 
-        static inline u16_t onTimeUS = 200;
+        static inline int64_t lastPulseUS = 0;
+        static inline u16_t onTimeUS = 100;
         static inline u8_t minOffTimeUS = 50;
+        static inline u16_t pulseSkipWindow = 300;
 };
