@@ -5,9 +5,9 @@ static constexpr uint8_t PIN_ZERO_CROSS = 7;
 static constexpr uint8_t PIN_OUTPUT = 18;
 
 static Interrupter interrupter;
-static Capability delayUS("Delay after zero cross", 0, 0, 10000);
-static Capability pulseWidthUS("Pulse width", 0, 0, 10000);
-static Capability zeroCrossSkips("Zero cross skips", 100, 0, 100);
+static NumberCapability delayUS("Delay after zero cross", 0, 0, 10000);
+static NumberCapability pulseWidthUS("Pulse width", 0, 0, 10000);
+static NumberCapability zeroCrossSkips("Zero cross skips", 100, 0, 100);
 
 static uint32_t outputPinMask = 0;
 static volatile uint8_t stage = 0;

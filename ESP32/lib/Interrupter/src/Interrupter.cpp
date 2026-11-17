@@ -1,6 +1,7 @@
 #include "Interrupter.h"
 
 #include "BLEEngine.h"
+#include "capabilities/CapabilityRegistry.h"
 
 Interrupter::Interrupter() {
     registry.setChangeCallback(onCapabilityChanged, this);
@@ -8,6 +9,20 @@ Interrupter::Interrupter() {
 
 bool Interrupter::registerCapability(Capability& capability) {
     return registry.registerCapability(capability);
+}
+
+bool Interrupter::registerReadOnlyCapability(Capability& capability) {
+    capability.readOnly = true;
+    return registry.registerCapability(capability);
+}
+
+bool Interrupter::registerTelemetry(TelemetryValue& telemetryValue) {
+    if (telemetryValue.name.isEmpty() || telemetryValue.type == CapabilityType::Button) {
+        return false;
+    }
+
+    telemetry[telemetryValue.name] = &telemetryValue;
+    return true;
 }
 
 Capability* Interrupter::getCapability(const String& name) {
@@ -26,9 +41,39 @@ bool Interrupter::setCapabilityValue(const String& name, uint32_t value) {
     return registry.setValue(name, value);
 }
 
+bool Interrupter::setCapabilityValue(const String& name, bool value) {
+    return registry.setValue(name, value ? 1u : 0u);
+}
+
 void Interrupter::setCapabilityChangeCallback(
     Capability::ChangeCallback callback, void* context) {
     registry.setGlobalChangeCallback(callback, context);
+}
+
+bool Interrupter::reportTelemetry(const String& name, uint32_t value,
+                                 CapabilityType type) {
+    auto it = telemetry.find(name);
+    if (it == telemetry.end()) {
+        return false;
+    }
+
+    it->second->type = type;
+    it->second->setValue(value);
+    reportTelemetryValue(name, *it->second);
+    return true;
+}
+
+bool Interrupter::reportTelemetry(const String& name, bool value,
+                                 CapabilityType type) {
+    auto it = telemetry.find(name);
+    if (it == telemetry.end()) {
+        return false;
+    }
+
+    it->second->type = type;
+    it->second->setValue(value);
+    reportTelemetryValue(name, *it->second);
+    return true;
 }
 
 const CapabilityRegistry::Map& Interrupter::capabilities() const {
@@ -40,7 +85,7 @@ void Interrupter::begin(const String& deviceName) {
         return;
     }
 
-    initBLE(deviceName, registry);
+    initBLE(deviceName, registry, &telemetry);
     bleStarted = true;
 }
 
@@ -93,6 +138,7 @@ void Interrupter::resetTimer() {
 void Interrupter::onCapabilityChanged(const Capability& capability, void* context) {
     const Interrupter* interrupter = static_cast<const Interrupter*>(context);
     if (interrupter != nullptr && interrupter->bleStarted) {
-        reportValue(capability.name, capability.value);
+        reportValue(capability.name, capability.value,
+                    capability.capabilityType(), false);
     }
 }

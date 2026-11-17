@@ -6,7 +6,7 @@ class PulseGenerator {
 public:
     static constexpr uint32_t MIN_BPS = 16;
 
-    bool begin(int pin, uint32_t bps, uint32_t onTimeUs, uint32_t maxBps,
+    bool begin(uint8_t pin, uint32_t bps, uint32_t onTimeUs, uint32_t maxBps,
                uint32_t maxOnTimeUs);
     bool enable();
     bool disable();

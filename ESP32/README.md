@@ -5,8 +5,13 @@ configured remotely over Bluetooth Low Energy (BLE):
 
 - `Interrupter` manages registered capabilities, starts the BLE service, and
   provides GPIO-interrupt and hardware-timer helpers.
-- `Capability` describes a named setting, its value and limits, and optional
-  validation and change handling.
+- `Capability` is the abstract base for named settings and change handling.
+- `NumberCapability` adds a value range; it is in
+  `lib/Interrupter/src/capabilities/NumberCapability.h`.
+- `ToggleCapability`, `ButtonCapability`, and `EnumCapability` provide
+  capability-specific interfaces in `lib/Interrupter/src/capabilities/`.
+- `TelemetryValue`, a report-only value separate from capabilities, lives in
+  `lib/Interrupter/src/telemetry/`.
 - `PulseGenerator` uses the ESP32 MCPWM peripheral to generate a pulse train.
 
 The library handles exposing settings and receiving BLE updates. Your firmware
@@ -15,11 +20,12 @@ signal.
 
 ## Remote configuration with capabilities
 
-A capability is a named unsigned integer setting with an initial value and
-inclusive minimum and maximum. Registering it with an `Interrupter` exposes it
-through that module's BLE service. Another BLE device connects and sends new
-values; the library validates and stores accepted updates, then reports changed
-values over BLE.
+Capabilities are named controls with a current value. `NumberCapability`
+provides inclusive minimum and maximum bounds; toggle and button capabilities
+do not have ranges, and enum capabilities define their selectable options.
+Registering a capability with an `Interrupter` exposes it through that module's
+BLE service. Another BLE device connects and sends new values; the library
+validates and stores accepted updates, then reports changed values over BLE.
 
 Create an `Interrupter`, declare and register the capabilities your firmware
 needs, configure its signal-generation hardware, then call `begin()` with the
@@ -29,7 +35,7 @@ BLE device name. Keep the objects alive for the lifetime of the firmware:
 #include "Interrupter.h"
 
 static Interrupter interrupter;
-static Capability pulseWidth("Pulse width", 0, 0, 200);
+static NumberCapability pulseWidth("Pulse width", 0, 0, 200);
 
 void setup() {
     if (!interrupter.registerCapability(pulseWidth)) {
@@ -50,6 +56,46 @@ void loop() {
 The initial value is used at startup. Connecting to BLE does not automatically
 change it or start output. The remote device is responsible for sending any
 updates.
+
+## BLE request and response protocol
+
+The device does not send definitions or telemetry snapshots automatically on
+connect. The host should subscribe to the relevant notification characteristics,
+then write requests to the host-requests characteristic:
+
+| UUID | Purpose |
+|---|---|
+| `00000000-0000-0000-0000-000000000000` | Interrupter service; included in advertising. |
+| `11111111-1111-1111-1111-111111111111` | Capability definitions; one JSON notification per registered capability, in response to the `caps` request. |
+| `22222222-2222-2222-2222-222222222222` | Device reports; capability value changes and the `hb` heartbeat. |
+| `33333333-3333-3333-3333-333333333333` | Control writes; host sends capability updates as a JSON object, for example `{"BPS":20}`. |
+| `44444444-4444-4444-4444-444444444444` | Telemetry value updates and snapshots. |
+| `55555555-5555-5555-5555-555555555555` | Telemetry definitions; one JSON notification per registered telemetry value, in response to the `telemetry` request. |
+| `66666666-6666-6666-6666-666666666666` | Host requests; write the exact text `caps` or `telemetry`. |
+
+Requests and control updates use separate write characteristics, so ordinary
+capability updates are sent directly to the JSON update handler without
+checking for request command strings. A `caps` request returns capability
+metadata, including each capability's current value. A `telemetry` request
+returns the telemetry definitions and then a current-value snapshot on the
+telemetry-updates characteristic. Later calls to `reportTelemetry()` send
+updates on that same characteristic. A device-side capability change is
+reported on the device-reports characteristic.
+
+Definition responses and telemetry snapshots are notifications, not a single
+aggregate JSON document. The host must enable notifications before writing a
+request; each record is a separate JSON object. Definition records have
+`"kind":"definition"` and are followed by an end record with `"kind":"end"`
+and a `count`. A `telemetry` request then sends the current-value snapshot on
+the telemetry-updates characteristic, ending with
+`"kind":"snapshot_end"` and a `count`. These markers let the host know when
+each response batch is complete, including when it is empty.
+
+Capability definitions include `name`, `type`, and `value`, plus `min`/`max`
+for ranged capabilities. Telemetry definitions include `name` and `type` (and
+optional enum `options`). Capability reports and telemetry value records have
+`"kind":"value"`, `name`, `type`, and `value`. Ongoing telemetry updates use
+the same value-record shape as the requested snapshot.
 
 ## Producing signals
 
@@ -81,9 +127,9 @@ methods:
 
 static Interrupter interrupter;
 static PulseGenerator pulseGen;
-static Capability pulseWidth(
+static NumberCapability pulseWidth(
     "Pulse width", 0, 0, 200, pulseGen, &PulseGenerator::setOnTimeUs);
-static Capability bps(
+static NumberCapability bps(
     "BPS", 16, PulseGenerator::MIN_BPS, 500,
     pulseGen, &PulseGenerator::setBps);
 
@@ -122,18 +168,18 @@ results from registration and timer methods.
 
 ### Built-in range and custom validation
 
-The default `Capability::validate()` accepts values within the inclusive
-minimum and maximum. Before validation, the library clamps an incoming value
-to that range. Override `validate()` in a subclass to apply additional rules
-to the clamped value or reject it:
+`NumberCapability::validate()` accepts values within the inclusive minimum
+and maximum. Before validation, the library clamps an incoming number to that
+range. Override `validate()` in a `NumberCapability` subclass to apply
+additional rules to the clamped value or reject it:
 
 ```cpp
-class EvenCapability : public Capability {
+class EvenCapability : public NumberCapability {
 public:
-    using Capability::Capability;
+    using NumberCapability::NumberCapability;
 
     bool validate(uint32_t candidate) const override {
-        return Capability::validate(candidate) && candidate % 2 == 0;
+        return NumberCapability::validate(candidate) && candidate % 2 == 0;
     }
 };
 
@@ -141,10 +187,9 @@ static EvenCapability divider("Divider", 2, 0, 20);
 ```
 
 For example, an update of 25 is first clamped to 20, then accepted by this
-validator; an update that clamps to an odd value is rejected. If an application
-must reject values outside the configured range rather than clamp them, the
-default `Capability` update path does not provide that behavior; it would need
-to be changed in the library.
+validator; an update that clamps to an odd value is rejected. `Capability` is
+an abstract common base and should not be instantiated directly. Toggle and
+button capabilities derive directly from it and have no numeric range.
 
 ### Updating values in firmware
 
@@ -161,7 +206,7 @@ helper object's member function to apply the new value:
 
 ```cpp
 static PulseGenerator pulseGen;
-static Capability pulseWidth(
+static NumberCapability pulseWidth(
     "Pulse width", 0, 0, 200, pulseGen, &PulseGenerator::setOnTimeUs);
 ```
 

@@ -11,7 +11,7 @@ uint32_t PulseGenerator::pulseWidthToTicks(uint32_t onTimeUs) const {
     return onTimeUs;
 }
 
-bool PulseGenerator::begin(int pin, uint32_t bps, uint32_t onTimeUs,
+bool PulseGenerator::begin(uint8_t pin, uint32_t bps, uint32_t onTimeUs,
                            uint32_t requestedMaxBps,
                            uint32_t requestedMaxOnTimeUs) {
     if (initialized || pin < 0) {

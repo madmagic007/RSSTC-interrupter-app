@@ -1,16 +1,15 @@
 #include "Interrupter.h"
 #include "PulseGenerator.h"
 
-static constexpr uint8_t PIN_OUTPUT = 18;
+#define PIN_OUTPUT 14
+#define PIN_UVLO 20
+#define PIN_OCP 19
 
 static Interrupter interrupter;
 static PulseGenerator pulseGen;
 
-static Capability pulseWidthUS(
-    "Pulse width", 0, 0, 200, pulseGen, &PulseGenerator::setOnTimeUs);
-static Capability beatsPerSecond(
-    "BPS", 16, PulseGenerator::MIN_BPS, 500,
-    pulseGen, &PulseGenerator::setBps);
+static NumberCapability pulseWidthUS("Pulse width", 30, 0, 200, pulseGen, &PulseGenerator::setOnTimeUs);
+static NumberCapability beatsPerSecond("BPS", 16, PulseGenerator::MIN_BPS, 1000, pulseGen, &PulseGenerator::setBps);
 
 void setup() {
     Serial.begin(115200);
@@ -27,10 +26,11 @@ void setup() {
         Serial.println("Failed to initialize pulse generator");
         return;
     }
+    
     interrupter.begin("DRSSTC Interrupter");
 }
 
 void loop() {
-    delay(1000);
+    delay(100);
     interrupter.sendHeartbeat();
 }
