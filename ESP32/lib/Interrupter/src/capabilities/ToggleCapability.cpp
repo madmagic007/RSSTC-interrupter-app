@@ -8,14 +8,10 @@ bool ToggleCapability::validate(uint32_t candidate) const {
     return candidate == 0 || candidate == 1;
 }
 
-CapabilityType ToggleCapability::capabilityType() const {
-    return CapabilityType::Toggle;
+uint32_t ToggleCapability::normalizeValue(uint32_t candidate) const {
+    return candidate ? 1u : 0u;
 }
 
 const char* ToggleCapability::typeName() const {
     return "toggle";
-}
-
-uint32_t ToggleCapability::normalizeValue(uint32_t candidate) const {
-    return candidate ? 1u : 0u;
 }

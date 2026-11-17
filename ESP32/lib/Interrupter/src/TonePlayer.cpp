@@ -42,18 +42,87 @@ TonePlayer::TonePlayer(u8_t outputPin) {
     }
 }
 
-void TonePlayer::startPlayingSequence(ToneDataEntry* sequence, u32_t len) {
+bool TonePlayer::startPlayingSequence(const ToneDataEntry* sequence, u32_t len) {
+    if (sequence == nullptr || len == 0) return false;
+
+    stopPlayingSequence();
+
+    portENTER_CRITICAL(&sequenceMux);
     TonePlayer::sequence = sequence;
     sequenceLen = len;
     sequencePos = 0;
-
     nextEntry = sequence[0];
+    sequenceDelayUS = 1;
+    sequencePaused = false;
+    sequenceActive = true;
 
     timerWrite(sequenceTimer, 0);
-    timerAlarm(sequenceTimer, 1, false, 0);
+    timerAlarm(sequenceTimer, sequenceDelayUS, false, 0);
+    portEXIT_CRITICAL(&sequenceMux);
+    return true;
+}
+
+void TonePlayer::pausePlayingSequence() {
+    portENTER_CRITICAL(&sequenceMux);
+    if (sequenceActive && !sequencePaused) {
+        const uint64_t elapsedUS = timerRead(sequenceTimer);
+        sequenceDelayUS = elapsedUS < sequenceDelayUS
+            ? sequenceDelayUS - static_cast<u32_t>(elapsedUS)
+            : 1;
+        sequencePaused = true;
+        timerStop(sequenceTimer);
+        stopOutput(false);
+    }
+    portEXIT_CRITICAL(&sequenceMux);
+}
+
+void TonePlayer::resumePlayingSequence() {
+    portENTER_CRITICAL(&sequenceMux);
+    if (sequenceActive && sequencePaused) {
+        sequencePaused = false;
+        timerWrite(sequenceTimer, 0);
+        timerAlarm(sequenceTimer, sequenceDelayUS, false, 0);
+    }
+    portEXIT_CRITICAL(&sequenceMux);
+}
+
+void TonePlayer::stopPlayingSequence() {
+    portENTER_CRITICAL(&sequenceMux);
+    timerStop(sequenceTimer);
+    sequence = nullptr;
+    sequenceLen = 0;
+    sequencePos = 0;
+    nextEntry = {};
+    sequenceDelayUS = 1;
+    sequencePaused = false;
+    sequenceActive = false;
+    stopOutput(true);
+    portEXIT_CRITICAL(&sequenceMux);
+}
+
+bool TonePlayer::isSequenceActive() {
+    return sequenceActive;
+}
+
+bool TonePlayer::isSequencePaused() {
+    return sequencePaused;
+}
+
+void TonePlayer::setOnTimeUs(uint32_t onTimeUs) {
+    onTimeUS = static_cast<u16_t>(onTimeUs);
+}
+
+void TonePlayer::setDeadTimeUs(uint32_t deadTimeUs) {
+    pulseSkipWindow = static_cast<u16_t>(deadTimeUs);
 }
 
 void IRAM_ATTR TonePlayer::handleSequence() {
+    portENTER_CRITICAL_ISR(&sequenceMux);
+    if (!sequenceActive || sequencePaused) {
+        portEXIT_CRITICAL_ISR(&sequenceMux);
+        return;
+    }
+
     ToneDataEntry& curEntry = nextEntry;
 
     setChannelFrequency(curEntry.channel, curEntry.freq);
@@ -61,13 +130,22 @@ void IRAM_ATTR TonePlayer::handleSequence() {
     sequencePos++;
     if (sequencePos >= sequenceLen) {
         timerStop(sequenceTimer);
+        sequence = nullptr;
+        sequenceLen = 0;
+        sequencePos = 0;
+        sequenceActive = false;
+        sequencePaused = false;
+        stopOutputFromISR(true);
+        portEXIT_CRITICAL_ISR(&sequenceMux);
         return;
     }
 
     nextEntry = sequence[sequencePos];
 
+    sequenceDelayUS = nextEntry.usSinceLast == 0 ? 1 : nextEntry.usSinceLast;
     timerWrite(sequenceTimer, 0);
-    timerAlarm(sequenceTimer, nextEntry.usSinceLast, false, 0);
+    timerAlarm(sequenceTimer, sequenceDelayUS, false, 0);
+    portEXIT_CRITICAL_ISR(&sequenceMux);
 }
 
 void IRAM_ATTR TonePlayer::setChannelFrequency(u8_t channel, uint32_t freq) {
@@ -87,15 +165,15 @@ void IRAM_ATTR TonePlayer::setChannelFrequency(u8_t channel, uint32_t freq) {
 
 bool IRAM_ATTR TonePlayer::onMcpwmTimer(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t* eventData, void* userData) {
     u32_t channel = (u32_t)(uintptr_t)userData;
+    if (channel >= 3) return false;
 
     if (!channelEnabled[channel]) return false;
 
     int64_t now = esp_timer_get_time();
     
     portENTER_CRITICAL_ISR(&pulseMux);
-    //pendingPulses = pendingPulses + 1;
-
-    if (!gpioTimerRunning && (now - lastPulseUS) >= pulseSkipWindow) {
+    if (sequenceActive && !sequencePaused && !gpioTimerRunning &&
+        (now - lastPulseUS) >= pulseSkipWindow) {
         gpioTimerRunning = true;
         lastPulseUS = now;
 
@@ -111,6 +189,15 @@ bool IRAM_ATTR TonePlayer::onMcpwmTimer(mcpwm_timer_handle_t timer, const mcpwm_
 
 void IRAM_ATTR TonePlayer::handleGpio() {
     portENTER_CRITICAL_ISR(&pulseMux);
+
+    if (!sequenceActive || sequencePaused) {
+        GPIO.out_w1tc.val = outputPinMask;
+        gpioState = false;
+        timerStop(gpioTimer);
+        gpioTimerRunning = false;
+        portEXIT_CRITICAL_ISR(&pulseMux);
+        return;
+    }
 
     if (!gpioState) {
         GPIO.out_w1ts.val = outputPinMask;
@@ -134,4 +221,30 @@ void IRAM_ATTR TonePlayer::handleGpio() {
     }
 
     portEXIT_CRITICAL_ISR(&pulseMux);
+}
+
+void TonePlayer::stopOutput(bool disableChannels) {
+    portENTER_CRITICAL(&pulseMux);
+    resetOutputState(disableChannels);
+    portEXIT_CRITICAL(&pulseMux);
+}
+
+void IRAM_ATTR TonePlayer::stopOutputFromISR(bool disableChannels) {
+    portENTER_CRITICAL_ISR(&pulseMux);
+    resetOutputState(disableChannels);
+    portEXIT_CRITICAL_ISR(&pulseMux);
+}
+
+void IRAM_ATTR TonePlayer::resetOutputState(bool disableChannels) {
+    timerStop(gpioTimer);
+    GPIO.out_w1tc.val = outputPinMask;
+    gpioState = false;
+    gpioTimerRunning = false;
+    pendingPulses = 0;
+    lastPulseUS = 0;
+    if (disableChannels) {
+        for (uint8_t channel = 0; channel < 3; channel++) {
+            channelEnabled[channel] = false;
+        }
+    }
 }

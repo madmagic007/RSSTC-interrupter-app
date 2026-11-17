@@ -5,22 +5,6 @@ Capability::Capability(const String& capabilityName, uint32_t initialValue,
     : name(capabilityName), value(initialValue), changeCallback(callback),
       changeContext(context) {}
 
-bool Capability::hasRange() const {
-    return false;
-}
-
-uint32_t Capability::minValue() const {
-    return 0;
-}
-
-uint32_t Capability::maxValue() const {
-    return 0;
-}
-
-const std::vector<String>* Capability::enumOptions() const {
-    return nullptr;
-}
-
 uint32_t Capability::normalizeValue(uint32_t candidate) const {
     return candidate;
 }
@@ -45,13 +29,44 @@ bool Capability::setValue(uint32_t candidate, bool invokeCallback) {
     if (invokeCallback && value != previousValue) {
         invokeChangeCallback();
     }
+
     return true;
 }
 
 void Capability::invokeChangeCallback() const {
     if (memberChangeCallback) {
         memberChangeCallback(*this);
-    } else if (changeCallback != nullptr) {
+    }
+
+    if (changeCallback != nullptr) {
         changeCallback(*this, changeContext);
     }
+}
+
+void Capability::writeParams(JsonDocument& document) const {
+    document["name"] = name;
+    document["type"] = typeName();
+    document["value"] = value;
+}
+
+String Capability::getDefinitionJson() const {
+    JsonDocument document;
+    writeParams(document);
+
+    String json;
+    serializeJson(document, json);
+
+    return json;
+}
+
+String Capability::getValueJson() const {
+    JsonDocument document;
+    document["name"] = name;
+    document["type"] = typeName();
+    document["value"] = value;
+
+    String json;
+    serializeJson(document, json);
+
+    return json;
 }

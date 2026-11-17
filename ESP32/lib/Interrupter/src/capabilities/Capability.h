@@ -1,11 +1,7 @@
 #pragma once
 
-#include "CapabilityType.h"
-
 #include <functional>
-#include <vector>
-
-class CapabilityRegistry;
+#include <ArduinoJson.h>
 
 class Capability {
 public:
@@ -14,25 +10,21 @@ public:
     virtual ~Capability() = default;
 
     virtual bool validate(uint32_t candidate) const = 0;
-    virtual bool hasRange() const;
-    virtual uint32_t minValue() const;
-    virtual uint32_t maxValue() const;
-    virtual CapabilityType capabilityType() const = 0;
-    virtual const char* typeName() const = 0;
-    virtual const std::vector<String>* enumOptions() const;
     bool setValue(uint32_t candidate);
+    String getDefinitionJson() const;
+    String getValueJson() const;
 
     String name;
     uint32_t value;
-    bool readOnly = false;
+
 
 protected:
-    Capability(const String& name, uint32_t value,
-               ChangeCallback callback = nullptr, void* context = nullptr);
+    Capability(const String& name, uint32_t value, ChangeCallback callback = nullptr, void* context = nullptr);
 
+    virtual const char* typeName() const = 0;
     virtual uint32_t normalizeValue(uint32_t candidate) const;
-    void setMemberChangeCallback(
-        std::function<void(const Capability&)> callback);
+    virtual void writeParams(JsonDocument& document) const;
+    void setMemberChangeCallback(std::function<void(const Capability&)> callback);
 
 private:
     ChangeCallback changeCallback = nullptr;

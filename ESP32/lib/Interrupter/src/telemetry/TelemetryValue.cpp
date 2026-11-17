@@ -3,48 +3,27 @@
 #include <ArduinoJson.h>
 #include <utility>
 
-TelemetryValue::TelemetryValue(const String& telemetryName, uint32_t initialValue,
-                               CapabilityType valueType,
-                               std::vector<String> telemetryOptions)
-    : name(telemetryName), value(initialValue), type(valueType),
-      options(std::move(telemetryOptions)) {}
+TelemetryValue::TelemetryValue(const String& telemetryName, uint32_t initialValue): name(telemetryName), value(initialValue) {}
 
-bool TelemetryValue::setValue(uint32_t candidate) {
-    value = candidate;
+bool TelemetryValue::setValue(uint32_t val) {
+    value = val;
     return true;
 }
 
-bool TelemetryValue::setValue(bool candidate) {
-    value = candidate ? 1u : 0u;
-    return true;
-}
-
-const char* TelemetryValue::typeName() const {
-    switch (type) {
-        case CapabilityType::Toggle:
-            return "toggle";
-        case CapabilityType::Button:
-            return "button";
-        case CapabilityType::Enum:
-            return "enum";
-        case CapabilityType::Number:
-        default:
-            return "number";
-    }
+void TelemetryValue::increment() {
+    value = value + 1;
 }
 
 String TelemetryValue::toJson() const {
     JsonDocument document;
-    document["name"] = name;
-    document["type"] = typeName();
-    document["value"] = value;
-    if (!options.empty()) {
-        JsonArray optionValues = document.createNestedArray("options");
-        for (const String& option : options) {
-            optionValues.add(option);
-        }
-    }
+    JsonObject object = document.to<JsonObject>();
+
+    object["name"] = name;
+    const uint32_t currentValue = value;
+    object["value"] = currentValue;
+
     String output;
     serializeJson(document, output);
+
     return output;
 }

@@ -1,31 +1,33 @@
 #pragma once
 
 #include "Capability.h"
-
 #include <map>
 
 class CapabilityRegistry {
 public:
     using ChangeCallback = Capability::ChangeCallback;
+    using BeforeChangeCallback = bool (*)(Capability& capability,
+                                          uint32_t& candidate);
     using Map = std::map<String, Capability*>;
 
-    bool registerCapability(Capability& capability);
-    Capability* find(const String& name);
-    const Capability* find(const String& name) const;
-    bool getValue(const String& name, uint32_t& value) const;
-    bool setValue(const String& name, uint32_t value);
-    bool updateValue(const String& name, uint32_t value);
+    static bool registerCapability(Capability& capability);
+    static bool setValue(Capability& capability, uint32_t value);
 
-    void setGlobalChangeCallback(ChangeCallback callback, void* context = nullptr);
-    void setChangeCallback(ChangeCallback callback, void* context = nullptr);
-    const Map& all() const;
-    String toJson() const;
-    bool applyIncomingJson(const String& json);
+    static void setBeforeChangeCallback(BeforeChangeCallback callback);
+    static void setChangeCallback(ChangeCallback callback, void* context = nullptr);
+    static const Map& all();
+    static bool applyIncomingJson(const String& json);
 
 private:
-    Map capabilities;
-    ChangeCallback globalChangeCallback = nullptr;
-    void* globalChangeContext = nullptr;
-    ChangeCallback changeCallback = nullptr;
-    void* changeContext = nullptr;
+    CapabilityRegistry() = delete;
+
+    static Capability* find(const String& name);
+    static bool isRegistered(const Capability& capability);
+    static bool applyValue(Capability& capability, uint32_t value,
+                           bool runBeforeChange, bool reportToRemote);
+
+    static inline Map capabilities;
+    static inline BeforeChangeCallback beforeChangeCallback = nullptr;
+    static inline ChangeCallback changeCallback = nullptr;
+    static inline void* changeContext = nullptr;
 };

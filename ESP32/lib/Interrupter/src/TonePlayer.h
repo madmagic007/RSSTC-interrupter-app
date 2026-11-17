@@ -1,6 +1,6 @@
 #pragma once
 #include <Arduino.h>
-#include <Interrupter.h>
+#include <esp32-hal-timer.h>
 #include "driver/mcpwm_prelude.h"
 #include <soc/gpio_struct.h>
 #include "freertos/FreeRTOS.h"
@@ -15,15 +15,25 @@ typedef struct {
 class TonePlayer {
     public:
         TonePlayer(u8_t outputPin);
-        static void startPlayingSequence(ToneDataEntry* sequence, u32_t len);
-        static void handleToneDataEntry(ToneDataEntry toneData);
+        static bool startPlayingSequence(const ToneDataEntry* sequence, u32_t len);
+        static void pausePlayingSequence();
+        static void resumePlayingSequence();
+        static void stopPlayingSequence();
+        static bool isSequenceActive();
+        static bool isSequencePaused();
+        static void setOnTimeUs(uint32_t onTimeUs);
+        static void setDeadTimeUs(uint32_t deadTimeUs);
 
     private:
         static inline u32_t outputPinMask = -1;
 
-        static inline ToneDataEntry* sequence = nullptr;
+        static inline const ToneDataEntry* sequence = nullptr;
         static inline u32_t sequenceLen = 0;
         static inline u32_t sequencePos = 0;
+        static inline volatile bool sequenceActive = false;
+        static inline volatile bool sequencePaused = false;
+        static inline u32_t sequenceDelayUS = 1;
+        static inline portMUX_TYPE sequenceMux = portMUX_INITIALIZER_UNLOCKED;
 
         static inline ToneDataEntry nextEntry = {};
         
@@ -50,7 +60,11 @@ class TonePlayer {
         static inline portMUX_TYPE pulseMux = portMUX_INITIALIZER_UNLOCKED;
 
         static inline int64_t lastPulseUS = 0;
-        static inline u16_t onTimeUS = 100;
+        static inline volatile u16_t onTimeUS = 100;
         static inline u8_t minOffTimeUS = 50;
-        static inline u16_t pulseSkipWindow = 300;
+        static inline volatile u16_t pulseSkipWindow = 300;
+
+        static void stopOutput(bool disableChannels);
+        static void IRAM_ATTR stopOutputFromISR(bool disableChannels);
+        static void IRAM_ATTR resetOutputState(bool disableChannels);
 };

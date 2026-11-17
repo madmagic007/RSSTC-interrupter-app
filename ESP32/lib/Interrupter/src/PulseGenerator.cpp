@@ -1,27 +1,57 @@
 
 #include "PulseGenerator.h"
-#include "driver/mcpwm_prelude.h"
-#include <Arduino.h>
 
-uint32_t PulseGenerator::periodToTicks(uint32_t bps) const {
+uint32_t PulseGenerator::periodToTicks(uint32_t bps) {
     return TIMER_RESOLUTION / bps;
 }
 
-uint32_t PulseGenerator::pulseWidthToTicks(uint32_t onTimeUs) const {
+uint32_t PulseGenerator::pulseWidthToTicks(uint32_t onTimeUs) {
     return onTimeUs;
 }
 
-bool PulseGenerator::begin(uint8_t pin, uint32_t bps, uint32_t onTimeUs,
-                           uint32_t requestedMaxBps,
-                           uint32_t requestedMaxOnTimeUs) {
-    if (initialized || pin < 0) {
+bool PulseGenerator::setPulseEventCallbacks(PulseEventCallback onStart,
+                                            PulseEventCallback onEnd) {
+    if (initialized || onStart == nullptr || onEnd == nullptr) {
         return false;
     }
 
-    if (requestedMaxBps < MIN_BPS || requestedMaxBps > 1000 ||
-        requestedMaxOnTimeUs > 200 ||
-        bps < MIN_BPS || bps > requestedMaxBps ||
-        onTimeUs > requestedMaxOnTimeUs) {
+    pulseStartCallback = onStart;
+    pulseEndCallback = onEnd;
+    return true;
+}
+
+bool PulseGenerator::onTimerEmpty(mcpwm_timer_handle_t,
+                                  const mcpwm_timer_event_data_t*, void*) {
+    if (outputEnabled && currentOnTimeUs > 0 && pulseStartCallback != nullptr) {
+        pulseStartCallback();
+    }
+    return false;
+}
+
+bool PulseGenerator::onComparatorReached(mcpwm_cmpr_handle_t,
+                                         const mcpwm_compare_event_data_t*,
+                                         void*) {
+    if (pulseEndCallback != nullptr) {
+        pulseEndCallback();
+    }
+    return false;
+}
+
+bool PulseGenerator::begin(uint8_t pin, const NumberCapability& bpsCapability,
+                           const NumberCapability& onTimeCapability) {
+    return begin(pin, bpsCapability.value, onTimeCapability.value,
+                 bpsCapability.max, onTimeCapability.max);
+}
+
+bool PulseGenerator::begin(uint8_t pin, uint32_t bps, uint32_t onTimeUs, uint32_t maxBPS, uint32_t maxOnTime) {
+    if (initialized) {
+        return false;
+    }
+
+    if (maxBPS < MIN_BPS || maxBPS > 1000 ||
+        maxOnTime > 200 ||
+        bps < MIN_BPS || bps > maxBPS ||
+        onTimeUs > maxOnTime) {
         return false;
     }
 
@@ -103,12 +133,37 @@ bool PulseGenerator::begin(uint8_t pin, uint32_t bps, uint32_t onTimeUs,
         return false;
     }
 
+    if (pulseStartCallback != nullptr) {
+        mcpwm_timer_event_callbacks_t timerCallbacks = {};
+        timerCallbacks.on_empty = onTimerEmpty;
+        if (mcpwm_timer_register_event_callbacks(timer, &timerCallbacks, nullptr) != ESP_OK) {
+            return false;
+        }
+
+        mcpwm_comparator_event_callbacks_t comparatorCallbacks = {};
+        comparatorCallbacks.on_reach = onComparatorReached;
+        if (mcpwm_comparator_register_event_callbacks(
+                comparator, &comparatorCallbacks, nullptr) != ESP_OK) {
+            return false;
+        }
+    }
+
     if (mcpwm_timer_enable(timer) != ESP_OK) {
         return false;
     }
 
+    outputPin = pin;
+    currentBps = bps;
+    currentOnTimeUs = onTimeUs;
+    maxBps = maxBPS;
+    maxOnTimeUs = maxOnTime;
+    initialized = true;
+    outputEnabled = onTimeUs != 0;
+
     if (onTimeUs != 0 &&
         mcpwm_timer_start_stop(timer, MCPWM_TIMER_START_NO_STOP) != ESP_OK) {
+        initialized = false;
+        outputEnabled = false;
         return false;
     }
 
@@ -116,14 +171,6 @@ bool PulseGenerator::begin(uint8_t pin, uint32_t bps, uint32_t onTimeUs,
     operatorHandle = oper;
     comparatorHandle = comparator;
     generatorHandle = generator;
-
-    outputPin = pin;
-    currentBps = bps;
-    currentOnTimeUs = onTimeUs;
-    maxBps = requestedMaxBps;
-    maxOnTimeUs = requestedMaxOnTimeUs;
-    initialized = true;
-    outputEnabled = onTimeUs != 0;
 
     return true;
 }
@@ -150,11 +197,12 @@ bool PulseGenerator::enable() {
     }
 
     auto timer = static_cast<mcpwm_timer_handle_t>(timerHandle);
+    outputEnabled = true;
     if (mcpwm_timer_start_stop(timer, MCPWM_TIMER_START_NO_STOP) != ESP_OK) {
+        outputEnabled = false;
         return false;
     }
 
-    outputEnabled = true;
     return true;
 }
 
@@ -180,11 +228,12 @@ bool PulseGenerator::disable() {
     }
 
     auto timer = static_cast<mcpwm_timer_handle_t>(timerHandle);
+    outputEnabled = false;
     if (mcpwm_timer_start_stop(timer, MCPWM_TIMER_STOP_EMPTY) != ESP_OK) {
+        outputEnabled = true;
         return false;
     }
 
-    outputEnabled = false;
     return true;
 }
 

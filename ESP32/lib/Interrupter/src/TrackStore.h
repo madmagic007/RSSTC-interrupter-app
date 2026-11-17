@@ -4,23 +4,48 @@
 #include <LittleFS.h>
 #include <esp_heap_caps.h>
 #include <TonePlayer.h>
+#include <vector>
 
 class TrackStore {
 public:
     bool begin() {
         if (!LittleFS.begin(false)) { err_ = "LittleFS mount failed (upload the filesystem image first)"; return false; }
+        err_ = "";
+        return true;
+    }
+
+    bool getTrackNames(std::vector<String>& names) {
+        names.clear();
+        File root = LittleFS.open("/");
+        if (!root || !root.isDirectory()) return fail("track directory unavailable");
+
+        for (File f = root.openNextFile(); f; f = root.openNextFile()) {
+            if (f.isDirectory()) continue;
+            String name = f.name();
+            if (!name.endsWith(".tsq")) continue;
+            if (name.startsWith("/")) name.remove(0, 1);
+            name.remove(name.length() - 4);
+            if (!name.isEmpty()) names.push_back(name);
+        }
+
+        err_ = "";
         return true;
     }
 
     void list(Print& out) {
-        File root = LittleFS.open("/");
-        for (File f = root.openNextFile(); f; f = root.openNextFile()) {
-            String n = f.name();
-            if (!n.endsWith(".tsq")) continue;
-            if (n.startsWith("/")) n.remove(0, 1);
-            n.remove(n.length() - 4);
-            out.printf("%-24s %6u bytes (~%u entries)\n", n.c_str(), (unsigned)f.size(),
-                       (unsigned)((f.size() - 8) / 7));
+        std::vector<String> names;
+        if (!getTrackNames(names)) {
+            out.println(error());
+            return;
+        }
+
+        for (const String& name : names) {
+            File f = LittleFS.open(String("/") + name + ".tsq", "r");
+            if (!f) continue;
+            const size_t size = f.size();
+            const size_t entries = size >= 8 ? (size - 8) / 7 : 0;
+            out.printf("%-24s %6u bytes (~%u entries)\n", name.c_str(),
+                       (unsigned)size, (unsigned)entries);
         }
     }
 
@@ -62,6 +87,7 @@ public:
         }
         data_ = buf;
         len_ = count;
+        err_ = "";
         return true;
     }
 
@@ -71,7 +97,7 @@ public:
         len_ = 0;
     }
 
-    ToneDataEntry* data() const { return data_; }
+    const ToneDataEntry* data() const { return data_; }
     uint32_t length() const { return len_; }
     const char* error() const { return err_; }
 
