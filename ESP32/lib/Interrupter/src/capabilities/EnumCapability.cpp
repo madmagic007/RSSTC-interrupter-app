@@ -27,8 +27,8 @@ const std::vector<String>* EnumCapability::enumOptions() const {
     return &values;
 }
 
-const char* EnumCapability::typeName() const {
-    return "enum";
+CapabilityType EnumCapability::type() const {
+    return CapabilityType::Enum;
 }
 
 void EnumCapability::writeParams(JsonDocument& document) const {

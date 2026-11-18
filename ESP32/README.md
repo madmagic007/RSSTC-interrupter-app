@@ -1,16 +1,13 @@
-# ESP32 Interrupter Library
+# ESP32 BLE Interrupter
 
-The main feature is BLE remote configurability: users can change module
-settings and trigger actions from a remote. This project is a library and set
-of examples for building your own ESP32 interrupter **modules**. A module is a
-firmware entry point that defines its settings, signal-generation behavior,
-and hardware connections.
+This project is a library and set of examples for building your own 
+ESP32 wireless interrupter with (optional) BLE remote controllability.
 
 The examples are selected with PlatformIO environments:
 
-- `regular` — configurable pulse train using MCPWM.
-- `mains-ramped` — zero-cross-triggered pulses using GPIO and a hardware timer.
-- `musical` — playback of a stored tone sequence.
+- `regular`      — Your classic configurable pulse train using MCPWM.
+- `mains-ramped` — zero-cross-triggered pulses for mains ramped QCW coils.
+- `musical`      — Musical playback from pre-computed stored tone sequences.
 
 Build an example with `pio run -e regular` (replace `regular` with another
 environment). To add a module, create a source file in `src/` and an
@@ -18,26 +15,22 @@ environment in `platformio.ini` whose `build_src_filter` selects it.
 
 ## BLE and capabilities
 
-`BLEEngine` provides the BLE service and sends capability and telemetry
-reports. Initialize it once with a device name. The remote connects, requests
-capability definitions, then writes setting updates as a JSON object mapping
-capability names to values, for example `{"BPS":20}`.
+`BLEEngine` provides and handles all the underlying BLE connectivity and
+comunications layer. A capability is a control variable That gets exposed
+to the remote over BLE.
+Four control and one read-only type and are currently available:
 
-A **capability** is a remotely configurable setting. Use
-`NumberCapability` for bounded numbers, `ToggleCapability` for on/off values,
-`ButtonCapability` for momentary actions, and `EnumCapability` for a choice
-from options. Register each capability with the static
-`CapabilityRegistry::registerCapability()` API before starting BLE.
-`CapabilityRegistry::setValue()` applies firmware-side changes through
-validation and callbacks; read the current value directly from the capability
-object’s `.value`.
+| Type | Class | Description |
+| --- | --- | --- |
+| Number | `NumberCapability` | A bounded numeric setting. |
+| Toggle | `ToggleCapability` | An on/off setting. |
+| Button | `ButtonCapability` | A momentary action. |
+| Enum | `EnumCapability` | A choice from a set of options. |
+| Read-only reporting | `TelemetryValue` | A value reported by the ESP32, not remotely configurable. |
 
-Individual capability callbacks can apply accepted settings to hardware. The
-registry also supports a change callback and a pre-change callback for
-cross-setting validation or safety overrides. The pre-change callback runs for
-incoming BLE updates; firmware-side `setValue()` calls skip it. `TelemetryValue`
-provides read-only values that firmware can update and report through
-`BLEEngine`.
+Callbacks are available for individual changes, global changes, and
+pre-change safety checks. 
+//TODO detailed wiki 
 
 # Generating pulses
 
@@ -48,7 +41,7 @@ timing includes software and interrupt latency.
 
 For a regular pulse train, prefer `PulseGenerator`. It uses the ESP32 MCPWM
 peripheral to generate pulse edges in hardware, without CPU work for each
-edge, resulting in more consistent timing and less jitter. CPU callbacks can
+edge, resulting in near perfect timing and near 0 jitter. CPU callbacks can
 observe MCPWM pulse boundaries when needed, but do not generate the waveform.
 
 ## Music playback

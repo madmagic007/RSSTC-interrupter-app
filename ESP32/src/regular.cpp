@@ -1,10 +1,6 @@
 #include "BLEEngine.h"
 #include "Interrupter.h"
-#include "capabilities/CapabilityRegistry.h"
-#include "capabilities/NumberCapability.h"
 #include "PulseGenerator.h"
-#include "Arduino.h"
-#include "telemetry/TelemetryValue.h"
 #include "freertos/FreeRTOS.h"
 
 static constexpr uint8_t PIN_OUTPUT = 14;
@@ -15,8 +11,7 @@ static NumberCapability pulseWidthUS("Pulse width", 30, 0, 200, &PulseGenerator:
 static NumberCapability beatsPerSecond("BPS", 16, PulseGenerator::MIN_BPS, 1000, &PulseGenerator::setBps);
 static TelemetryValue uvloTripCount("UVLO trip count");
 static TelemetryValue ocpTripCount("OCP trip count");
-static TelemetryValue averageOcpTripsPerPulseX100(
-    "Average OCP trips per pulse (x100)");
+static TelemetryValue averageOcpTripsPerPulseX100("Average OCP trips per pulse (x100)");
 
 static portMUX_TYPE pulseOcpMux = portMUX_INITIALIZER_UNLOCKED;
 static uint32_t currentPulseOcpTrips = 0;
@@ -59,8 +54,8 @@ void setup() {
     Serial.begin(115200);
     delay(2000);
 
-    if (!CapabilityRegistry::registerCapability(pulseWidthUS) ||
-        !CapabilityRegistry::registerCapability(beatsPerSecond)) {
+    if (!BLEEngine::registerCapability(pulseWidthUS) ||
+        !BLEEngine::registerCapability(beatsPerSecond)) {
         Serial.println("Failed to register interrupter capabilities");
         return;
     }

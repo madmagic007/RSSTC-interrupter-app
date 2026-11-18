@@ -1,5 +1,7 @@
 #include "Capability.h"
 
+#include <utility>
+
 Capability::Capability(const String& capabilityName, uint32_t initialValue,
                        ChangeCallback callback, void* context)
     : name(capabilityName), value(initialValue), changeCallback(callback),
@@ -45,7 +47,7 @@ void Capability::invokeChangeCallback() const {
 
 void Capability::writeParams(JsonDocument& document) const {
     document["name"] = name;
-    document["type"] = typeName();
+    document["type"] = static_cast<uint8_t>(type());
     document["value"] = value;
 }
 
@@ -62,7 +64,6 @@ String Capability::getDefinitionJson() const {
 String Capability::getValueJson() const {
     JsonDocument document;
     document["name"] = name;
-    document["type"] = typeName();
     document["value"] = value;
 
     String json;

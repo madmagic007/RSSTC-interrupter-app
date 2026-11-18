@@ -1,9 +1,6 @@
 #pragma once
 
-#include "../capabilities/CapabilityType.h"
-
 #include <Arduino.h>
-#include <vector>
 
 class TelemetryValue {
 public:

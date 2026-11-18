@@ -12,6 +12,6 @@ uint32_t ToggleCapability::normalizeValue(uint32_t candidate) const {
     return candidate ? 1u : 0u;
 }
 
-const char* ToggleCapability::typeName() const {
-    return "toggle";
+CapabilityType ToggleCapability::type() const {
+    return CapabilityType::Toggle;
 }

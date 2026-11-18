@@ -1,19 +1,49 @@
 #include "BLEEngine.h"
-#include "capabilities/CapabilityRegistry.h"
-#include "telemetry/TelemetryValue.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+void BLEEngine::resetControlMessageIds() {
+    lastControlMessageId = 0;
+    hasControlMessageId = false;
+}
+
+bool BLEEngine::isStaleOrDuplicateControlMessage(uint64_t id) {
+    if (hasControlMessageId && id <= lastControlMessageId) {
+        return true;
+    }
+
+    lastControlMessageId = id;
+    hasControlMessageId = true;
+    return false;
+}
+
+void BLEEngine::definitionsRequestTask(void*) {
+    uint8_t request;
+    if (xQueueReceive(definitionsRequestQueue, &request, 0) == pdTRUE &&
+        request == 1) {
+        BLEEngine::reportCapabilityDefinitions();
+        BLEEngine::reportTelemetryDefinitions();
+    }
+
+    vTaskDelete(nullptr);
+}
+
+bool BLEEngine::registerCapability(Capability& capability) {
+    return CapabilityRegistry::registerCapability(capability);
+}
 
 void BLEEngine::reportCapabilityDefinitions() {
     if (!connected || capabilityChars == nullptr) {
         return;
     }
 
-    for (const auto& entry : CapabilityRegistry::all()) {
-        const Capability& capability = *entry.second;
+    for (const Capability* entry : CapabilityRegistry::all()) {
+        const Capability& capability = *entry;
 
         capabilityChars->setValue(capability.getDefinitionJson());
         capabilityChars->notify();
 
-        delay(20);
+        delay(100);
     }
 }
 
@@ -46,7 +76,7 @@ void BLEEngine::reportTelemetryDefinitions() {
         telemetryDefinitionsChars->setValue(telemetry.toJson());
         telemetryDefinitionsChars->notify();
 
-        delay(20);
+        delay(100);
     }
 }
 
@@ -83,11 +113,15 @@ class ServerCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer*) override {
         BLEDevice::getAdvertising()->stop();
         BLEEngine::connected = true;
+        BLEEngine::definitionsRequested = false;
+        BLEEngine::resetControlMessageIds();
+        xQueueReset(BLEEngine::definitionsRequestQueue);
         Serial.println("Phone connected");
     }
 
     void onDisconnect(BLEServer*) override {
         BLEEngine::connected = false;
+        xQueueReset(BLEEngine::definitionsRequestQueue);
         BLEDevice::getAdvertising()->start();
         Serial.println("Phone disconnected");
     }
@@ -96,7 +130,26 @@ class ServerCallbacks : public BLEServerCallbacks {
 class ValueCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* characteristic) override {
         const String data = characteristic->getValue();
-        CapabilityRegistry::applyIncomingJson(data);
+        JsonDocument document;
+        const DeserializationError error = deserializeJson(document, data);
+        if (error || !document.is<JsonObject>()) {
+            Serial.println("Control message rejected: expected JSON object");
+            return;
+        }
+
+        JsonObjectConst message = document.as<JsonObjectConst>();
+        const JsonVariantConst idValue = message["id"];
+        const JsonVariantConst values = message["values"];
+        if (!idValue.is<uint64_t>() || !values.is<JsonObjectConst>()) {
+            Serial.println("Control message rejected: expected numeric id and values object");
+            return;
+        }
+
+        if (BLEEngine::isStaleOrDuplicateControlMessage(idValue.as<uint64_t>())) {
+            return;
+        }
+
+        CapabilityRegistry::applyIncomingJson(values.as<JsonObjectConst>());
     }
 };
 
@@ -104,11 +157,24 @@ class RequestCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* characteristic) override {
         const String request = characteristic->getValue();
 
-        if (request == "caps" || request == "capDefs") {
-            BLEEngine::reportCapabilityDefinitions();
-        } else if (request == "telemetry" || request == "telDefs") {
-            BLEEngine::reportTelemetryDefinitions();
-            BLEEngine::reportTelemetrySnapshot();
+        if (request == "defs") {
+            if (BLEEngine::definitionsRequested) {
+                return;
+            }
+
+            BLEEngine::definitionsRequested = true;
+            const uint8_t queuedRequest = 1;
+            if (xQueueSend(BLEEngine::definitionsRequestQueue, &queuedRequest, 0) != pdTRUE) {
+                BLEEngine::definitionsRequested = false;
+                Serial.println("Failed to queue BLE definitions request");
+                return;
+            }
+
+            if (xTaskCreate(BLEEngine::definitionsRequestTask, "ble_defs", 4096, nullptr, 1, nullptr) != pdPASS) {
+                xQueueReset(BLEEngine::definitionsRequestQueue);
+                BLEEngine::definitionsRequested = false;
+                Serial.println("Failed to create BLE definitions task");
+            }
         } else {
             Serial.println("Unknown BLE request: " + request);
         }
@@ -116,6 +182,12 @@ class RequestCallbacks : public BLECharacteristicCallbacks {
 };
 
 void BLEEngine::initBLE(const String& name) {
+    definitionsRequestQueue = xQueueCreate(1, sizeof(uint8_t));
+    if (definitionsRequestQueue == nullptr) {
+        Serial.println("Failed to create BLE definitions request queue");
+        return;
+    }
+
     BLEDevice::init(name);
     BLEDevice::setMTU(247);
 
@@ -137,7 +209,8 @@ void BLEEngine::initBLE(const String& name) {
         BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
     BLECharacteristic* valueChars = service->createCharacteristic(
-        CONTROL_WRITE_UUID, BLECharacteristic::PROPERTY_WRITE);
+        CONTROL_WRITE_UUID,
+        BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
     valueChars->setCallbacks(new ValueCallbacks());
 
     BLECharacteristic* requestChars = service->createCharacteristic(

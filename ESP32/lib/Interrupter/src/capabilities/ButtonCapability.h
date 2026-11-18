@@ -11,5 +11,5 @@ public:
 
 protected:
     uint32_t normalizeValue(uint32_t candidate) const override;
-    const char* typeName() const override;
+    CapabilityType type() const override;
 };

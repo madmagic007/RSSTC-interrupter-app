@@ -11,8 +11,8 @@ uint32_t NumberCapability::normalizeValue(uint32_t candidate) const {
     return constrain(candidate, min, max);
 }
 
-const char* NumberCapability::typeName() const {
-    return "number";
+CapabilityType NumberCapability::type() const {
+    return CapabilityType::Number;
 }
 
 void NumberCapability::writeParams(JsonDocument& document) const {

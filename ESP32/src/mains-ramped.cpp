@@ -113,9 +113,9 @@ static void IRAM_ATTR onZeroCross() {
 void setup() {
     Serial.begin(115200);
 
-    if (!CapabilityRegistry::registerCapability(delayUS) ||
-        !CapabilityRegistry::registerCapability(pulseWidthUS) ||
-        !CapabilityRegistry::registerCapability(zeroCrossSkips)) {
+    if (!BLEEngine::registerCapability(delayUS) ||
+        !BLEEngine::registerCapability(pulseWidthUS) ||
+        !BLEEngine::registerCapability(zeroCrossSkips)) {
         Serial.println("Failed to register interrupter capabilities");
         return;
     }

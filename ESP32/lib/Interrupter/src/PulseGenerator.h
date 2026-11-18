@@ -1,8 +1,7 @@
 #pragma once
 
-#include <stdint.h>
-#include "driver/mcpwm_prelude.h"
 #include <Arduino.h>
+#include "driver/mcpwm_prelude.h"
 #include "capabilities/NumberCapability.h"
 
 class PulseGenerator {

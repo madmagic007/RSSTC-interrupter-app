@@ -1,12 +1,12 @@
 #pragma once
 
+#include <BLEUtils.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
-#include <BLEUtils.h>
-#include <map>
+#include <freertos/queue.h>
 
-class Capability;
-class TelemetryValue;
+#include "capabilities/CapabilityRegistry.h"
+#include "telemetry/TelemetryValue.h"
 
 #define INTERRUPTER_SERVICE_UUID       "00000000-0000-0000-0000-000000000000"
 #define CAPABILITY_DEFINITIONS_UUID    "11111111-1111-1111-1111-111111111111"
@@ -20,6 +20,7 @@ class BLEEngine {
     public:
         static void initBLE(const String& name);
 
+        static bool registerCapability(Capability& capability);
         static void reportCapabilityDefinitions();
         static void reportCapability(const Capability& capability);
 
@@ -33,7 +34,15 @@ class BLEEngine {
     private:
         BLEEngine() = delete;
 
+        static void definitionsRequestTask(void* parameter);
+        static void resetControlMessageIds();
+        static bool isStaleOrDuplicateControlMessage(uint64_t id);
+
         static inline bool connected = false;
+        static inline bool definitionsRequested = false;
+        static inline QueueHandle_t definitionsRequestQueue = nullptr;
+        static inline uint64_t lastControlMessageId = 0;
+        static inline bool hasControlMessageId = false;
 
         static inline std::map<String, const TelemetryValue*> telemetries;
 

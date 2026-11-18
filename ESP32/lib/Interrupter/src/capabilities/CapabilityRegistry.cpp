@@ -8,6 +8,7 @@ bool CapabilityRegistry::registerCapability(Capability& capability) {
     }
 
     capabilities.emplace(capability.name, &capability);
+    registrationOrder.push_back(&capability);
     return true;
 }
 
@@ -81,8 +82,8 @@ void CapabilityRegistry::setChangeCallback(ChangeCallback callback, void* contex
     changeContext = context;
 }
 
-const CapabilityRegistry::Map& CapabilityRegistry::all() {
-    return capabilities;
+const CapabilityRegistry::List& CapabilityRegistry::all() {
+    return registrationOrder;
 }
 
 bool CapabilityRegistry::applyIncomingJson(const String& json) {
@@ -99,8 +100,12 @@ bool CapabilityRegistry::applyIncomingJson(const String& json) {
         return false;
     }
 
+    return applyIncomingJson(document.as<JsonObjectConst>());
+}
+
+bool CapabilityRegistry::applyIncomingJson(JsonObjectConst updates) {
     bool allUpdatesAccepted = true;
-    for (JsonPair entry : document.as<JsonObject>()) {
+    for (JsonPairConst entry : updates) {
         const String name = entry.key().c_str();
         const JsonVariantConst incomingValue = entry.value();
         uint32_t value;

@@ -140,12 +140,12 @@ void setup() {
         return;
     }
 
-    if (!CapabilityRegistry::registerCapability(selectedTrackCapability) ||
-        !CapabilityRegistry::registerCapability(playButton) ||
-        !CapabilityRegistry::registerCapability(pauseResumeButton) ||
-        !CapabilityRegistry::registerCapability(stopButton) ||
-        !CapabilityRegistry::registerCapability(onTimeCapability) ||
-        !CapabilityRegistry::registerCapability(deadTimeCapability)) {
+    if (!BLEEngine::registerCapability(selectedTrackCapability) ||
+        !BLEEngine::registerCapability(playButton) ||
+        !BLEEngine::registerCapability(pauseResumeButton) ||
+        !BLEEngine::registerCapability(stopButton) ||
+        !BLEEngine::registerCapability(onTimeCapability) ||
+        !BLEEngine::registerCapability(deadTimeCapability)) {
         Serial.println("Failed to register musical capabilities");
         return;
     }

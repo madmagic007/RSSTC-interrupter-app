@@ -1,7 +1,10 @@
 #pragma once
 
-#include <functional>
+#include <Arduino.h>
 #include <ArduinoJson.h>
+#include <functional>
+
+#include "CapabilityType.h"
 
 class Capability {
 public:
@@ -21,7 +24,7 @@ public:
 protected:
     Capability(const String& name, uint32_t value, ChangeCallback callback = nullptr, void* context = nullptr);
 
-    virtual const char* typeName() const = 0;
+    virtual CapabilityType type() const = 0;
     virtual uint32_t normalizeValue(uint32_t candidate) const;
     virtual void writeParams(JsonDocument& document) const;
     void setMemberChangeCallback(std::function<void(const Capability&)> callback);

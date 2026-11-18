@@ -12,6 +12,6 @@ uint32_t ButtonCapability::normalizeValue(uint32_t candidate) const {
     return candidate ? 1u : 0u;
 }
 
-const char* ButtonCapability::typeName() const {
-    return "button";
+CapabilityType ButtonCapability::type() const {
+    return CapabilityType::Button;
 }
