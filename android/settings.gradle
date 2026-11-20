@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "RSSTC interrupter app"
+rootProject.name = "CoilLink"
 include ':app'
