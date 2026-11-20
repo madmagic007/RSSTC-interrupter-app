@@ -3,7 +3,6 @@ package me.madmagic.rsstcinterrupterapp;
 import android.app.Application;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.ScanResult;
-import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -19,7 +18,6 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,16 +28,12 @@ public class BLEViewModel extends AndroidViewModel implements BLEManager.Listene
         void onCapabilityValueChanged(String name);
         void onTelemetryChanged();
         void onTelemetryValueChanged(String name);
-        void onDefinitionsChanged(boolean complete, boolean hasCapabilities, boolean hasTelemetry);
+        void onDefinitionsComplete(boolean hasCapabilities, boolean hasTelemetry);
         void onScanResult(ScanResult scanResult);
         void onConnectionStateChanged(boolean connected, String name);
     }
 
-    private static final String CONTROL_VALUES_PREFERENCES = "interrupter_control_values";
-    private static final String CONTROL_VALUES_KEY_PREFIX = "controls_";
-
     private final BLEManager bleManager;
-    private final SharedPreferences controlValuePreferences;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, ControlEntry> capabilities = new LinkedHashMap<>();
     private final List<ControlEntry> capabilityEntries = new ArrayList<>();
@@ -51,12 +45,9 @@ public class BLEViewModel extends AndroidViewModel implements BLEManager.Listene
     private volatile boolean connected;
     private boolean capabilityDefinitionsComplete;
     private boolean telemetryDefinitionsComplete;
-    private boolean restoredControlValues;
 
     public BLEViewModel(@NonNull Application application) {
         super(application);
-        controlValuePreferences = application.getSharedPreferences(
-                CONTROL_VALUES_PREFERENCES, Application.MODE_PRIVATE);
         bleManager = new BLEManager(application);
         bleManager.setListener(this);
     }
@@ -68,8 +59,9 @@ public class BLEViewModel extends AndroidViewModel implements BLEManager.Listene
         listener.onConnectionStateChanged(connected, connectedDeviceName);
         listener.onCapabilitiesChanged();
         listener.onTelemetryChanged();
-        listener.onDefinitionsChanged(
-                areAllDefinitionsComplete(), !capabilities.isEmpty(), !telemetry.isEmpty());
+        if (areAllDefinitionsComplete()) {
+            listener.onDefinitionsComplete(!capabilities.isEmpty(), !telemetry.isEmpty());
+        }
     }
 
     public Map<String, ControlEntry> getCapabilities() {
@@ -101,12 +93,6 @@ public class BLEViewModel extends AndroidViewModel implements BLEManager.Listene
     }
 
     public void writeCapabilityValue(String name, int value) {
-        ControlEntry capability = capabilities.get(name);
-        if (connectedDeviceAddress != null && capability != null
-                && capability.isUserValuePersistable(value)) {
-            capability.setValue(value);
-            saveUserControlValue(name, value);
-        }
         bleManager.queueControlValue(name, value);
     }
 
@@ -195,68 +181,11 @@ public class BLEViewModel extends AndroidViewModel implements BLEManager.Listene
     }
 
     private void onDefinitionCompletionChanged() {
-        if (areAllDefinitionsComplete() && !restoredControlValues) {
-            restoredControlValues = true;
-            restoreUserControlValues();
-        }
+        if (!areAllDefinitionsComplete()) return;
 
         UiListener listener = uiListener;
         if (listener != null) {
-            listener.onDefinitionsChanged(
-                    areAllDefinitionsComplete(), !capabilities.isEmpty(), !telemetry.isEmpty());
-        }
-    }
-
-    private String controlValuesPreferenceKey() {
-        return CONTROL_VALUES_KEY_PREFIX + connectedDeviceAddress.toUpperCase(Locale.ROOT);
-    }
-
-    private void saveUserControlValue(String name, int value) {
-        String preferenceKey = controlValuesPreferenceKey();
-        String storedValues = controlValuePreferences.getString(preferenceKey, "{}");
-        try {
-            JSONObject values = new JSONObject(storedValues);
-            values.put(name, value);
-            controlValuePreferences.edit().putString(preferenceKey, values.toString()).apply();
-        } catch (JSONException e) {
-            Log.e("BLE", "Failed to save control value for " + connectedDeviceAddress, e);
-        }
-    }
-
-    private void restoreUserControlValues() {
-        if (connectedDeviceAddress == null) return;
-
-        String storedValues = controlValuePreferences.getString(
-                controlValuesPreferenceKey(), null);
-        if (storedValues == null) return;
-
-        final JSONObject values;
-        try {
-            values = new JSONObject(storedValues);
-        } catch (JSONException e) {
-            Log.e("BLE", "Failed to read saved control values for " + connectedDeviceAddress, e);
-            return;
-        }
-
-        boolean valuesChanged = false;
-        for (ControlEntry capability : capabilityEntries) {
-            Object storedValue = values.opt(capability.name);
-            if (!(storedValue instanceof Number)) continue;
-
-            Number number = (Number) storedValue;
-            int value = number.intValue();
-            if (number.doubleValue() != value || !capability.isUserValuePersistable(value)) {
-                continue;
-            }
-
-            capability.setValue(value);
-            bleManager.queueControlValue(capability.name, value);
-            valuesChanged = true;
-        }
-
-        if (valuesChanged) {
-            UiListener listener = uiListener;
-            if (listener != null) listener.onCapabilitiesChanged();
+            listener.onDefinitionsComplete(!capabilities.isEmpty(), !telemetry.isEmpty());
         }
     }
 
@@ -286,7 +215,6 @@ public class BLEViewModel extends AndroidViewModel implements BLEManager.Listene
                 telemetryEntries.clear();
                 capabilityDefinitionsComplete = false;
                 telemetryDefinitionsComplete = false;
-                restoredControlValues = false;
             }
             if (!connected) {
                 connectedDeviceAddress = null;
@@ -298,10 +226,6 @@ public class BLEViewModel extends AndroidViewModel implements BLEManager.Listene
                 if (!connected) {
                     listener.onCapabilitiesChanged();
                     listener.onTelemetryChanged();
-                }
-                if (newConnection || !connected) {
-                    listener.onDefinitionsChanged(
-                            false, !capabilities.isEmpty(), !telemetry.isEmpty());
                 }
             }
         });

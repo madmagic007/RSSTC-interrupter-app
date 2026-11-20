@@ -22,11 +22,6 @@ public class NumberCapability extends ControlEntry {
     }
 
     @Override
-    public boolean isUserValuePersistable(int value) {
-        return value >= min && value <= max;
-    }
-
-    @Override
     public int getViewType() {
         return TYPE_NUMBER;
     }

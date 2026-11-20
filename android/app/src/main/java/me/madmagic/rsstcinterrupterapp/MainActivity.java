@@ -30,7 +30,6 @@ public class MainActivity extends AppCompatActivity {
     private ControlAdapter controlAdapter;
     private TelemetryAdapter telemetryAdapter;
     private float telemetrySplit;
-    private boolean deviceConnected;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -90,46 +89,21 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onDefinitionsChanged(
-                    boolean complete, boolean hasCapabilities, boolean hasTelemetry) {
+            public void onDefinitionsComplete(boolean hasCapabilities, boolean hasTelemetry) {
                 runOnUiThread(() -> {
-                        if (!deviceConnected) {
-                            listContainer.setVisibility(View.GONE);
-                            telemetryList.setVisibility(View.GONE);
-                            divider.setVisibility(View.GONE);
-                            telemetryBoundary.setVisibility(View.GONE);
-                            return;
-                        }
+                    listContainer.setVisibility(hasCapabilities ? View.VISIBLE : View.GONE);
+                    telemetryList.setVisibility(hasTelemetry ? View.VISIBLE : View.GONE);
 
-                        if (!complete) {
-                        listContainer.setVisibility(View.VISIBLE);
-                        telemetryList.setVisibility(View.VISIBLE);
-                        divider.setVisibility(View.VISIBLE);
-                        telemetryBoundary.setVisibility(View.VISIBLE);
-                        telemetryStart.setGuidelinePercent(telemetrySplit);
-                    } else if (hasCapabilities && hasTelemetry) {
-                        listContainer.setVisibility(View.VISIBLE);
-                        telemetryList.setVisibility(View.VISIBLE);
-                        divider.setVisibility(View.VISIBLE);
-                        telemetryBoundary.setVisibility(View.VISIBLE);
+                    boolean showDivider = hasCapabilities && hasTelemetry;
+                    divider.setVisibility(showDivider ? View.VISIBLE : View.GONE);
+                    telemetryBoundary.setVisibility(showDivider ? View.VISIBLE : View.GONE);
+
+                    if (showDivider) {
                         telemetryStart.setGuidelinePercent(telemetrySplit);
                     } else if (hasCapabilities) {
-                        listContainer.setVisibility(View.VISIBLE);
-                        telemetryList.setVisibility(View.GONE);
-                        divider.setVisibility(View.GONE);
-                        telemetryBoundary.setVisibility(View.GONE);
                         telemetryStart.setGuidelinePercent(1f);
                     } else if (hasTelemetry) {
-                        listContainer.setVisibility(View.GONE);
-                        telemetryList.setVisibility(View.VISIBLE);
-                        divider.setVisibility(View.GONE);
-                        telemetryBoundary.setVisibility(View.GONE);
                         telemetryStart.setGuidelinePercent(0f);
-                    } else {
-                        listContainer.setVisibility(View.GONE);
-                        telemetryList.setVisibility(View.GONE);
-                        divider.setVisibility(View.GONE);
-                        telemetryBoundary.setVisibility(View.GONE);
                     }
                 });
             }
@@ -144,21 +118,15 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onConnectionStateChanged(boolean connected, String name) {
                 runOnUiThread(() -> {
-                    deviceConnected = connected;
                     TextView tv = findViewById(R.id.conDevice);
                     tv.setText(connected ? name : "No interrupter connected");
+                    listContainer.setVisibility(View.GONE);
+                    telemetryList.setVisibility(View.GONE);
+                    divider.setVisibility(View.GONE);
+                    telemetryBoundary.setVisibility(View.GONE);
                     if (connected) {
-                        listContainer.setVisibility(View.VISIBLE);
-                        telemetryList.setVisibility(View.VISIBLE);
-                        divider.setVisibility(View.VISIBLE);
-                        telemetryBoundary.setVisibility(View.VISIBLE);
                         telemetryStart.setGuidelinePercent(telemetrySplit);
                         popup.clearDevices();
-                    } else {
-                        listContainer.setVisibility(View.GONE);
-                        telemetryList.setVisibility(View.GONE);
-                        divider.setVisibility(View.GONE);
-                        telemetryBoundary.setVisibility(View.GONE);
                     }
                 });
             }

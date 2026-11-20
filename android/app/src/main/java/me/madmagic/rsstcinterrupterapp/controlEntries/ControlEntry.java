@@ -36,10 +36,6 @@ public abstract class ControlEntry {
         this.value = value;
     }
 
-    public boolean isUserValuePersistable(int value) {
-        return true;
-    }
-
     public abstract int getViewType();
     public abstract int getLayoutId();
     public abstract void bindView(View view, BiConsumer<String, Integer> callback);

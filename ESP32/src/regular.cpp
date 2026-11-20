@@ -12,12 +12,15 @@ static NumberCapability pulseWidthUS("Pulse width", 30, 0, 200, &PulseGenerator:
 static NumberCapability beatsPerSecond("BPS", 16, PulseGenerator::MIN_BPS, 1000, &PulseGenerator::setBps);
 static NumberTelemetry uvloTripCount("UVLO trip count");
 static NumberTelemetry ocpTripCount("OCP trip count");
-static NumberTelemetry averageOcpTripsPerPulseX100("Average OCP trips per pulse (x100)");
+static NumberTelemetry averageOcpTripsPerPulse("Average OCP trips per pulse");
 
+static constexpr uint8_t OCP_PULSE_HISTORY_SIZE = 10;
 static portMUX_TYPE pulseOcpMux = portMUX_INITIALIZER_UNLOCKED;
-static uint32_t currentPulseOcpTrips = 0;
-static uint64_t intervalOcpTripSum = 0;
-static uint32_t intervalPulseCount = 0;
+static uint8_t currentPulseOcpTrips = 0;
+static uint8_t recentPulseOcpTrips[OCP_PULSE_HISTORY_SIZE] = {};
+static uint8_t recentOcpTripSum = 0;
+static uint8_t recentPulseCount = 0;
+static uint8_t nextPulseHistoryIndex = 0;
 static bool pulseWindowActive = false;
 
 static void IRAM_ATTR onUvloTrip() {
@@ -44,8 +47,17 @@ static void IRAM_ATTR onMcpwmPulseStart() {
 static void IRAM_ATTR onMcpwmPulseEnd() {
     portENTER_CRITICAL_ISR(&pulseOcpMux);
     if (pulseWindowActive) {
-        intervalOcpTripSum += currentPulseOcpTrips;
-        intervalPulseCount++;
+        if (recentPulseCount == OCP_PULSE_HISTORY_SIZE) {
+            recentOcpTripSum -= recentPulseOcpTrips[nextPulseHistoryIndex];
+        } else {
+            recentPulseCount++;
+        }
+
+        recentPulseOcpTrips[nextPulseHistoryIndex] = currentPulseOcpTrips;
+        recentOcpTripSum += currentPulseOcpTrips;
+
+        nextPulseHistoryIndex = (nextPulseHistoryIndex + 1) % OCP_PULSE_HISTORY_SIZE;
+
         pulseWindowActive = false;
     }
     portEXIT_CRITICAL_ISR(&pulseOcpMux);
@@ -53,7 +65,6 @@ static void IRAM_ATTR onMcpwmPulseEnd() {
 
 void setup() {
     Serial.begin(115200);
-    delay(2000);
 
     if (!BLEEngine::registerCapability(pulseWidthUS) ||
         !BLEEngine::registerCapability(beatsPerSecond)) {
@@ -63,7 +74,7 @@ void setup() {
 
     if (!BLEEngine::registerTelemetry(uvloTripCount) ||
         !BLEEngine::registerTelemetry(ocpTripCount) ||
-        !BLEEngine::registerTelemetry(averageOcpTripsPerPulseX100)) {
+        !BLEEngine::registerTelemetry(averageOcpTripsPerPulse)) {
         Serial.println("Failed to register fault telemetry");
         return;
     }
@@ -79,8 +90,7 @@ void setup() {
         return;
     }
 
-    if (!PulseGenerator::setPulseEventCallbacks(onMcpwmPulseStart,
-                                                 onMcpwmPulseEnd)) {
+    if (!PulseGenerator::setPulseEventCallbacks(onMcpwmPulseStart, onMcpwmPulseEnd)) {
         Serial.println("Failed to register MCPWM pulse callbacks");
         return;
     }
@@ -93,23 +103,20 @@ void setup() {
 }
 
 void loop() {
-    delay(5000);
-    //BLEEngine::sendBLEHeartbeat();
+    delay(1000);
 
-    uint64_t tripSum;
-    uint32_t pulseCount;
+    uint8_t tripSum;
+    uint8_t pulseCount;
 
     portENTER_CRITICAL(&pulseOcpMux);
-    tripSum = intervalOcpTripSum;
-    pulseCount = intervalPulseCount;
-    intervalOcpTripSum = 0;
-    intervalPulseCount = 0;
+    tripSum = recentOcpTripSum;
+    pulseCount = recentPulseCount;
     portEXIT_CRITICAL(&pulseOcpMux);
 
-    const uint32_t averageX100 = pulseCount == 0
-        ? 0
-        : static_cast<uint32_t>(
-                (tripSum * 100 + pulseCount / 2) / pulseCount);
-    averageOcpTripsPerPulseX100.setValue(averageX100);
+    const uint32_t average =
+        pulseCount == 0 ? 0 :
+        static_cast<uint32_t>((tripSum + pulseCount / 2) / pulseCount);
+    averageOcpTripsPerPulse.setValue(average);
+
     BLEEngine::reportTelemetrySnapshot();
 }

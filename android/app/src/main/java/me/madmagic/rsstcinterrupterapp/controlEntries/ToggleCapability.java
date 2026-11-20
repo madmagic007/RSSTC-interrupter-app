@@ -15,11 +15,6 @@ public class ToggleCapability extends ControlEntry {
     }
 
     @Override
-    public boolean isUserValuePersistable(int value) {
-        return value == 0 || value == 1;
-    }
-
-    @Override
     public int getViewType() {
         return TYPE_TOGGLE;
     }

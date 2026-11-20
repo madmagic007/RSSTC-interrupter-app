@@ -30,11 +30,6 @@ public class EnumCapability extends ControlEntry {
     }
 
     @Override
-    public boolean isUserValuePersistable(int value) {
-        return value >= 0 && value < values.size();
-    }
-
-    @Override
     public int getViewType() {
         return TYPE_ENUM;
     }
