@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 
 import me.madmagic.rsstcinterrupterapp.controlEntries.ControlEntry;
+import me.madmagic.rsstcinterrupterapp.controlEntries.TelemetryEntry;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -24,6 +25,9 @@ public class BleViewModel extends AndroidViewModel implements BLEManager.Listene
 
     public interface UiListener {
         void onCapabilitiesChanged();
+        void onCapabilityValueChanged(String name);
+        void onTelemetryChanged();
+        void onTelemetryValueChanged(String name);
         void onScanResult(ScanResult scanResult);
         void onConnectionStateChanged(boolean connected, String name);
     }
@@ -32,6 +36,8 @@ public class BleViewModel extends AndroidViewModel implements BLEManager.Listene
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, ControlEntry> capabilities = new LinkedHashMap<>();
     private final List<ControlEntry> capabilityEntries = new ArrayList<>();
+    private final Map<String, TelemetryEntry> telemetry = new LinkedHashMap<>();
+    private final List<TelemetryEntry> telemetryEntries = new ArrayList<>();
     private volatile UiListener uiListener;
     private volatile String connectedDeviceName;
     private volatile boolean connected;
@@ -48,6 +54,7 @@ public class BleViewModel extends AndroidViewModel implements BLEManager.Listene
 
         listener.onConnectionStateChanged(connected, connectedDeviceName);
         listener.onCapabilitiesChanged();
+        listener.onTelemetryChanged();
     }
 
     public Map<String, ControlEntry> getCapabilities() {
@@ -56,6 +63,14 @@ public class BleViewModel extends AndroidViewModel implements BLEManager.Listene
 
     public List<ControlEntry> getCapabilityEntries() {
         return capabilityEntries;
+    }
+
+    public Map<String, TelemetryEntry> getTelemetry() {
+        return telemetry;
+    }
+
+    public List<TelemetryEntry> getTelemetryEntries() {
+        return telemetryEntries;
     }
 
     public void startScanning() {
@@ -76,9 +91,15 @@ public class BleViewModel extends AndroidViewModel implements BLEManager.Listene
 
     @Override
     public void onDataReceived(UUID uuid, JSONObject data) {
+
+        try {
+            Log.d("BLE", uuid.toString() + " " + data.toString(4));
+        } catch (JSONException e) {
+            throw new RuntimeException(e);
+        }
+
         mainHandler.post(() -> {
             if (BLEManager.CAPS_DEFS_UUID.equals(uuid)) {
-
                 String name = data.optString("name");
                 if (capabilities.containsKey(name)) return;
 
@@ -92,16 +113,42 @@ public class BleViewModel extends AndroidViewModel implements BLEManager.Listene
                     Log.e("BLE", "Failed to parse capability definition", e);
                     return;
                 }
+                UiListener listener = uiListener;
+                if (listener != null) {
+                    listener.onCapabilitiesChanged();
+                }
             } else if (BLEManager.DEVICE_REPOTS_UUID.equals(uuid)) {
-
-                ControlEntry capability = capabilities.get(data.optString("name"));
+                String name = data.optString("name");
+                ControlEntry capability = capabilities.get(name);
                 if (capability == null) return;
 
                 capability.setValue(data.optInt("value"));
-            }
+                UiListener listener = uiListener;
+                if (listener != null) {
+                    listener.onCapabilityValueChanged(name);
+                }
+            } else if (BLEManager.TELEMETRY_DEFS_UUIDS.equals(uuid)) {
+                String name = data.optString("name");
+                if (telemetry.containsKey(name)) return;
 
-            if (uiListener != null) {
-                uiListener.onCapabilitiesChanged();
+                TelemetryEntry entry = new TelemetryEntry(name, data.optLong("value"));
+                telemetry.put(name, entry);
+                telemetryEntries.add(entry);
+
+                UiListener listener = uiListener;
+                if (listener != null) {
+                    listener.onTelemetryChanged();
+                }
+            } else if (BLEManager.TELEMETRY_UPDATES_UUID.equals(uuid)) {
+                String name = data.optString("name");
+                TelemetryEntry entry = telemetry.get(name);
+                if (entry == null) return;
+
+                entry.setValue(data.optLong("value"));
+                UiListener listener = uiListener;
+                if (listener != null) {
+                    listener.onTelemetryValueChanged(name);
+                }
             }
         });
     }
@@ -122,6 +169,8 @@ public class BleViewModel extends AndroidViewModel implements BLEManager.Listene
             if (!connected) {
                 capabilities.clear();
                 capabilityEntries.clear();
+                telemetry.clear();
+                telemetryEntries.clear();
             }
 
             UiListener listener = uiListener;
@@ -129,6 +178,7 @@ public class BleViewModel extends AndroidViewModel implements BLEManager.Listene
                 listener.onConnectionStateChanged(connected, connectedDeviceName);
                 if (!connected) {
                     listener.onCapabilitiesChanged();
+                    listener.onTelemetryChanged();
                 }
             }
         });

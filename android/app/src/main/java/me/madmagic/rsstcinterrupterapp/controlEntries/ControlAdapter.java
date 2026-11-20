@@ -5,6 +5,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
+import android.widget.ListView;
 import me.madmagic.rsstcinterrupterapp.controlEntries.ControlEntry;
 
 import java.util.List;
@@ -64,5 +65,24 @@ public class MyAdapter extends BaseAdapter {
         entry.bindView(convertView, callback);
 
         return convertView;
+    }
+
+    public void refreshVisibleEntry(String name, ListView listView) {
+        ControlEntry entry = map.get(name);
+        if (entry == null) return;
+
+        int firstVisiblePosition = listView.getFirstVisiblePosition();
+        int lastVisiblePosition = listView.getLastVisiblePosition();
+        for (int position = firstVisiblePosition;
+             position <= lastVisiblePosition && position < items.size();
+             position++) {
+            if (items.get(position) != entry) continue;
+
+            View row = listView.getChildAt(position - firstVisiblePosition);
+            if (row != null) {
+                entry.bindView(row, callback);
+            }
+            return;
+        }
     }
 }
