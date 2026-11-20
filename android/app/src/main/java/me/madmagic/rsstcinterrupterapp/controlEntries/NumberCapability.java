@@ -22,6 +22,11 @@ public class NumberCapability extends ControlEntry {
     }
 
     @Override
+    public boolean isUserValuePersistable(int value) {
+        return value >= min && value <= max;
+    }
+
+    @Override
     public int getViewType() {
         return TYPE_NUMBER;
     }
@@ -39,6 +44,7 @@ public class NumberCapability extends ControlEntry {
         final Handler handler = new Handler(Looper.getMainLooper());
         Integer lastSentValue;
         Runnable sampleSliderValue;
+        boolean trackingTouch;
     }
 
     @Override
@@ -59,6 +65,7 @@ public class NumberCapability extends ControlEntry {
             holder.slider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
                 @Override
                 public void onStartTrackingTouch(Slider slider) {
+                    sliderHolder.trackingTouch = true;
                     sliderHolder.handler.removeCallbacks(sliderHolder.sampleSliderValue);
                     sliderHolder.handler.postDelayed(
                             sliderHolder.sampleSliderValue, 20);
@@ -66,6 +73,7 @@ public class NumberCapability extends ControlEntry {
 
                 @Override
                 public void onStopTrackingTouch(Slider slider) {
+                    sliderHolder.trackingTouch = false;
                     sliderHolder.handler.removeCallbacks(sliderHolder.sampleSliderValue);
                     sendSliderValue(sliderHolder);
                 }
@@ -76,6 +84,7 @@ public class NumberCapability extends ControlEntry {
 
         if (holder.entry != this) {
             holder.handler.removeCallbacks(holder.sampleSliderValue);
+            holder.trackingTouch = false;
             holder.lastSentValue = value;
         }
 
@@ -84,7 +93,9 @@ public class NumberCapability extends ControlEntry {
         holder.itemName.setText(name);
         holder.slider.setValueFrom(min);
         holder.slider.setValueTo(max);
-        holder.slider.setValue(value);
+        if (!holder.trackingTouch) {
+            holder.slider.setValue(value);
+        }
     }
 
     private static void sendSliderValue(ViewHolder holder) {
@@ -93,8 +104,8 @@ public class NumberCapability extends ControlEntry {
         }
 
         int value = (int) holder.slider.getValue();
+        holder.entry.setValue(value);
         if (holder.lastSentValue == null || holder.lastSentValue != value) {
-            holder.entry.setValue(value);
             holder.lastSentValue = value;
             holder.callback.accept(holder.entry.name, value);
         }

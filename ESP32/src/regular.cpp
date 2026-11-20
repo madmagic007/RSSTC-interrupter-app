@@ -2,6 +2,7 @@
 #include "Interrupter.h"
 #include "PulseGenerator.h"
 #include "freertos/FreeRTOS.h"
+#include "telemetry/NumberTelemetry.h"
 
 static constexpr uint8_t PIN_OUTPUT = 14;
 static constexpr uint8_t PIN_UVLO = 20;
@@ -9,9 +10,9 @@ static constexpr uint8_t PIN_OCP = 19;
 
 static NumberCapability pulseWidthUS("Pulse width", 30, 0, 200, &PulseGenerator::setOnTimeUs);
 static NumberCapability beatsPerSecond("BPS", 16, PulseGenerator::MIN_BPS, 1000, &PulseGenerator::setBps);
-static TelemetryValue uvloTripCount("UVLO trip count");
-static TelemetryValue ocpTripCount("OCP trip count");
-static TelemetryValue averageOcpTripsPerPulseX100("Average OCP trips per pulse (x100)");
+static NumberTelemetry uvloTripCount("UVLO trip count");
+static NumberTelemetry ocpTripCount("OCP trip count");
+static NumberTelemetry averageOcpTripsPerPulseX100("Average OCP trips per pulse (x100)");
 
 static portMUX_TYPE pulseOcpMux = portMUX_INITIALIZER_UNLOCKED;
 static uint32_t currentPulseOcpTrips = 0;
@@ -92,26 +93,23 @@ void setup() {
 }
 
 void loop() {
-    static uint32_t lastTelemetryMs = 0;
-    const uint32_t now = millis();
+    delay(5000);
+    //BLEEngine::sendBLEHeartbeat();
 
-    if (now - lastTelemetryMs >= 1000) {
-        lastTelemetryMs = now;
+    uint64_t tripSum;
+    uint32_t pulseCount;
 
-        uint64_t tripSum;
-        uint32_t pulseCount;
-        portENTER_CRITICAL(&pulseOcpMux);
-        tripSum = intervalOcpTripSum;
-        pulseCount = intervalPulseCount;
-        intervalOcpTripSum = 0;
-        intervalPulseCount = 0;
-        portEXIT_CRITICAL(&pulseOcpMux);
+    portENTER_CRITICAL(&pulseOcpMux);
+    tripSum = intervalOcpTripSum;
+    pulseCount = intervalPulseCount;
+    intervalOcpTripSum = 0;
+    intervalPulseCount = 0;
+    portEXIT_CRITICAL(&pulseOcpMux);
 
-        const uint32_t averageX100 = pulseCount == 0
-            ? 0
-            : static_cast<uint32_t>(
-                  (tripSum * 100 + pulseCount / 2) / pulseCount);
-        averageOcpTripsPerPulseX100.setValue(averageX100);
-        BLEEngine::reportTelemetrySnapshot();
-    }
+    const uint32_t averageX100 = pulseCount == 0
+        ? 0
+        : static_cast<uint32_t>(
+                (tripSum * 100 + pulseCount / 2) / pulseCount);
+    averageOcpTripsPerPulseX100.setValue(averageX100);
+    BLEEngine::reportTelemetrySnapshot();
 }

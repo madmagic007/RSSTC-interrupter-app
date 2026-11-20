@@ -4,7 +4,8 @@
 #include "capabilities/CapabilityRegistry.h"
 #include "capabilities/EnumCapability.h"
 #include "capabilities/NumberCapability.h"
-#include "telemetry/TelemetryValue.h"
+#include "telemetry/BooleanTelemetry.h"
+#include "telemetry/StringTelemetry.h"
 
 #include <vector>
 
@@ -15,12 +16,13 @@ static TrackStore trackStore;
 static std::vector<String> trackNames;
 static EnumCapability selectedTrackCapability("Track");
 static volatile bool trackLoaded = false;
+static String loadedTrackName;
 static NumberCapability onTimeCapability(
     "On time", 100, 10, 100, &TonePlayer::setOnTimeUs);
 static NumberCapability deadTimeCapability(
     "Dead time", 300, 5, 500, &TonePlayer::setDeadTimeUs);
-static TelemetryValue trackLoadedTelemetry("Track loaded");
-static TelemetryValue playbackTelemetry("Playing");
+static StringTelemetry trackLoadedTelemetry("Track loaded");
+static BooleanTelemetry playbackTelemetry("Playing");
 
 static void onPlay(const Capability& capability, void* context);
 static void onPauseResume(const Capability& capability, void* context);
@@ -35,14 +37,12 @@ static void acknowledgeButton(ButtonCapability& button) {
 }
 
 static void updatePlaybackTelemetry() {
-    const uint32_t loaded = trackLoaded ? 1u : 0u;
-    const uint32_t playing =
-        TonePlayer::isSequenceActive() && !TonePlayer::isSequencePaused()
-            ? 1u
-            : 0u;
+    const String loadedTrack = trackLoaded ? loadedTrackName : "";
+    const bool playing =
+        TonePlayer::isSequenceActive() && !TonePlayer::isSequencePaused();
 
-    if (trackLoadedTelemetry.value != loaded) {
-        trackLoadedTelemetry.setValue(loaded);
+    if (trackLoadedTelemetry.value != loadedTrack) {
+        trackLoadedTelemetry.setValue(loadedTrack);
         BLEEngine::reportTelemetry(trackLoadedTelemetry);
     }
     if (playbackTelemetry.value != playing) {
@@ -80,6 +80,7 @@ static void onPlay(const Capability& capability, void*) {
     }
 
     trackLoaded = true;
+    loadedTrackName = trackName;
     updatePlaybackTelemetry();
     Serial.printf("Playing track: %s\n", trackName.c_str());
     acknowledgeButton(playButton);
@@ -120,22 +121,24 @@ void setup() {
     Serial.begin(115200);
     delay(5000);
 
-    if (!trackStore.begin()) {
+    bool trackStoreReady = trackStore.begin();
+    if (!trackStoreReady) {
         Serial.println(trackStore.error());
-        return;
-    }
-
-    if (!trackStore.getTrackNames(trackNames)) {
+    } else if (!trackStore.getTrackNames(trackNames)) {
         Serial.println(trackStore.error());
-        return;
-    }
-    if (trackNames.empty()) {
+    } else if (trackNames.empty()) {
         Serial.println("No .tsq tracks found in LittleFS");
-        return;
     }
 
-    trackStore.list(Serial);
-    if (!selectedTrackCapability.setOptions(trackNames)) {
+    if (trackStoreReady) {
+        trackStore.list(Serial);
+    }
+
+    std::vector<String> trackOptions = trackNames;
+    if (trackOptions.empty()) {
+        trackOptions.push_back("No tracks available");
+    }
+    if (!selectedTrackCapability.setOptions(trackOptions)) {
         Serial.println("Failed to set track capability options");
         return;
     }
@@ -167,5 +170,12 @@ void loop() {
         updatePlaybackTelemetry();
     }
 
-    delay(50);
+    static uint32_t lastHeartbeatMs = 0;
+    const uint32_t now = millis();
+    if (now - lastHeartbeatMs >= 1000) {
+        BLEEngine::sendBLEHeartbeat();
+        lastHeartbeatMs = now;
+    }
+
+    delay(200);
 }

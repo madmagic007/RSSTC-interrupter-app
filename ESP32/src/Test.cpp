@@ -1,4 +1,5 @@
 #include "BLEEngine.h"
+#include "telemetry/NumberTelemetry.h"
 
 #include <vector>
 
@@ -8,8 +9,8 @@ static ButtonCapability btn("btn");
 static ToggleCapability toggle("toggle");
 static EnumCapability enumCap("enum", 0, std::vector<String>{"First", "Second"});
 
-static TelemetryValue t1("t1", 0);
-static TelemetryValue t2("t2", 1654968);
+static NumberTelemetry t1("t1", 0);
+static NumberTelemetry t2("t2", 1654968);
 
 void setup() {
     Serial.begin(115200);

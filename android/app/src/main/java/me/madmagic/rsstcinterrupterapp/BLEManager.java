@@ -19,7 +19,7 @@ public class BLEManager {
     public interface Listener {
         void onDataReceived(UUID uuid, JSONObject data);
         void onScanResult(ScanResult scanResult);
-        void onConnectionStateChanged(boolean connected, String name);
+        void onConnectionStateChanged(boolean connected, String name, String address);
     }
 
     private static final UUID SERVICE_UUID =            UUID.fromString("00000000-0000-0000-0000-000000000000");
@@ -221,7 +221,8 @@ public class BLEManager {
                 stopScanning();
                 Listener currentListener = listener;
                 if (currentListener != null) {
-                    currentListener.onConnectionStateChanged(true, g.getDevice().getName());
+                    currentListener.onConnectionStateChanged(
+                            true, g.getDevice().getName(), g.getDevice().getAddress());
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 synchronized (writeQueueLock) {
@@ -236,7 +237,7 @@ public class BLEManager {
                 startScanning();
                 Listener currentListener = listener;
                 if (currentListener != null) {
-                    currentListener.onConnectionStateChanged(false, null);
+                    currentListener.onConnectionStateChanged(false, null, null);
                 }
             }
         }

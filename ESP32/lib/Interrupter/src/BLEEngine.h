@@ -6,7 +6,7 @@
 #include <freertos/queue.h>
 
 #include "capabilities/CapabilityRegistry.h"
-#include "telemetry/TelemetryValue.h"
+#include "telemetry/Telemetry.h"
 
 #define INTERRUPTER_SERVICE_UUID       "00000000-0000-0000-0000-000000000000"
 #define CAPABILITY_DEFINITIONS_UUID    "11111111-1111-1111-1111-111111111111"
@@ -24,9 +24,9 @@ class BLEEngine {
         static void reportCapabilityDefinitions();
         static void reportCapability(const Capability& capability);
 
-        static bool registerTelemetry(const TelemetryValue& telemetry);
+        static bool registerTelemetry(const Telemetry& telemetry);
         static void reportTelemetryDefinitions();
-        static void reportTelemetry(const TelemetryValue& value);
+        static void reportTelemetry(const Telemetry& value);
         static void reportTelemetrySnapshot();
 
         static void sendBLEHeartbeat();
@@ -44,7 +44,7 @@ class BLEEngine {
         static inline uint64_t lastControlMessageId = 0;
         static inline bool hasControlMessageId = false;
 
-        static inline std::map<String, const TelemetryValue*> telemetries;
+        static inline std::map<String, const Telemetry*> telemetries;
 
         static inline BLECharacteristic* capabilityChars = nullptr;
         static inline BLECharacteristic* reportChars = nullptr;

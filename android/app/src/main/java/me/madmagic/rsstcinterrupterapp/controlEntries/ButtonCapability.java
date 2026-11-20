@@ -15,6 +15,11 @@ public class ButtonCapability extends ControlEntry {
     }
 
     @Override
+    public boolean isUserValuePersistable(int value) {
+        return false;
+    }
+
+    @Override
     public int getViewType() {
         return TYPE_BUTTON;
     }

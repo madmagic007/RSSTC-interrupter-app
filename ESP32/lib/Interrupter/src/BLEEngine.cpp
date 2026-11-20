@@ -45,6 +45,9 @@ void BLEEngine::reportCapabilityDefinitions() {
 
         delay(100);
     }
+
+    capabilityChars->setValue("{\"definitions_complete\":true}");
+    capabilityChars->notify();
 }
 
 void BLEEngine::reportCapability(const Capability& capability) {
@@ -56,7 +59,7 @@ void BLEEngine::reportCapability(const Capability& capability) {
     reportChars->notify();
 }
 
-bool BLEEngine::registerTelemetry(const TelemetryValue& telemetry) {
+bool BLEEngine::registerTelemetry(const Telemetry& telemetry) {
     if (telemetry.name.isEmpty()) {
         return false;
     }
@@ -71,16 +74,19 @@ void BLEEngine::reportTelemetryDefinitions() {
     }
 
     for (const auto& entry : telemetries) {
-        const TelemetryValue& telemetry = *entry.second;
+        const Telemetry& telemetry = *entry.second;
 
         telemetryDefinitionsChars->setValue(telemetry.toJson());
         telemetryDefinitionsChars->notify();
 
         delay(100);
     }
+
+    telemetryDefinitionsChars->setValue("{\"definitions_complete\":true}");
+    telemetryDefinitionsChars->notify();
 }
 
-void BLEEngine::reportTelemetry(const TelemetryValue& telementry) {
+void BLEEngine::reportTelemetry(const Telemetry& telementry) {
     if (!connected || telemetryUpdatesChars == nullptr) {
         return;
     }

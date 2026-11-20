@@ -18,7 +18,7 @@ environment in `platformio.ini` whose `build_src_filter` selects it.
 `BLEEngine` provides and handles all the underlying BLE connectivity and
 comunications layer. A capability is a control variable That gets exposed
 to the remote over BLE.
-Four control and one read-only type and are currently available:
+Four control and 3 read-only type and are currently available:
 
 | Type | Class | Description |
 | --- | --- | --- |
@@ -26,7 +26,9 @@ Four control and one read-only type and are currently available:
 | Toggle | `ToggleCapability` | An on/off setting. |
 | Button | `ButtonCapability` | A momentary action. |
 | Enum | `EnumCapability` | A choice from a set of options. |
-| Read-only reporting | `TelemetryValue` | A value reported by the ESP32, not remotely configurable. |
+| Numeric telemetry | `NumberTelemetry` | A numeric value reported by the ESP32. |
+| Boolean telemetry | `BooleanTelemetry` | A true/false value reported by the ESP32. |
+| String telemetry | `StringTelemetry` | A text value reported by the ESP32. |
 
 Callbacks are available for individual changes, global changes, and
 pre-change safety checks. 
